@@ -1,14 +1,8 @@
-import os
-import pytest
 from stockpulse.scanners.market_scanner import run_full_scan
 
-# Skip if no Finnhub API key — scanner requires live price data
-pytestmark = pytest.mark.skipif(
-    not os.getenv("FINNHUB_API_KEY"),
-    reason="FINNHUB_API_KEY not set"
-)
 
 def test_full_scan_returns_recommendations():
+    """Scanner uses yfinance for OHLCV — no API key needed."""
     results = run_full_scan(tickers=["AAPL", "MSFT"])
     assert isinstance(results, list)
     assert len(results) > 0

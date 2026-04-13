@@ -1,10 +1,11 @@
-"""Unified market data provider using Finnhub."""
+"""Unified market data provider. Finnhub for quotes/news/earnings, yfinance for OHLCV."""
 import logging
 import time
 from datetime import datetime, timedelta
 
 import finnhub
 import pandas as pd
+import yfinance as yf
 
 from stockpulse.config.settings import get_config
 from stockpulse.data.cache import get_cached, set_cached
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 _client = None
 _last_call_time = 0.0
-_MIN_CALL_INTERVAL = 1.0  # seconds between API calls (60/min limit)
+_MIN_CALL_INTERVAL = 1.0  # seconds between Finnhub API calls (60/min limit)
 
 
 def _get_client() -> finnhub.Client:
@@ -43,47 +44,24 @@ def _rate_limit():
 def get_price_history(
     ticker: str, period: str = "6mo", interval: str = "1d"
 ) -> pd.DataFrame:
-    """Fetch OHLCV price history for a ticker via Finnhub stock candles."""
+    """Fetch OHLCV price history via yfinance (free, no API key needed).
+
+    Finnhub's stock_candles endpoint requires a paid plan, so we use yfinance
+    for historical candle data. Finnhub is used for quotes, news, and earnings.
+    """
     cache_key = f"price_{ticker}_{period}_{interval}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
 
-    # Convert period string to date range
-    period_days = {
-        "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730,
-    }
-    days = period_days.get(period, 180)
-    end_ts = int(datetime.now().timestamp())
-    start_ts = int((datetime.now() - timedelta(days=days)).timestamp())
-
-    # Map interval to Finnhub resolution
-    resolution_map = {"1d": "D", "1wk": "W", "1mo": "M"}
-    resolution = resolution_map.get(interval, "D")
-
     try:
-        _rate_limit()
-        client = _get_client()
-        data = client.stock_candles(ticker, resolution, start_ts, end_ts)
-
-        if data.get("s") != "ok" or not data.get("t"):
-            logger.warning("No price data for %s (status: %s)", ticker, data.get("s"))
+        t = yf.Ticker(ticker)
+        df = t.history(period=period, interval=interval)
+        if df.empty:
+            logger.warning("No price data for %s", ticker)
             return pd.DataFrame()
-
-        df = pd.DataFrame({
-            "Open": data["o"],
-            "High": data["h"],
-            "Low": data["l"],
-            "Close": data["c"],
-            "Volume": data["v"],
-        }, index=pd.DatetimeIndex(
-            pd.to_datetime(data["t"], unit="s"), name="Date"
-        ))
-
         set_cached(cache_key, df)
         return df
-    except ValueError:
-        raise  # Re-raise missing API key
     except Exception:
         logger.exception("Failed to fetch price data for %s", ticker)
         return pd.DataFrame()
@@ -190,10 +168,29 @@ def get_news(ticker: str) -> list[dict]:
 
 
 def bulk_download(tickers: list[str], period: str = "6mo") -> dict[str, pd.DataFrame]:
-    """Download price data for multiple tickers (sequential with rate limiting)."""
-    result = {}
-    for ticker in tickers:
-        df = get_price_history(ticker, period=period)
-        if not df.empty:
-            result[ticker] = df
-    return result
+    """Download price data for multiple tickers via yfinance bulk download."""
+    cache_key = f"bulk_{'_'.join(sorted(tickers[:20]))}_{period}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = yf.download(
+            tickers, period=period, group_by="ticker", threads=True, progress=False
+        )
+        result = {}
+        if len(tickers) == 1:
+            result[tickers[0]] = data
+        else:
+            for ticker in tickers:
+                try:
+                    df = data[ticker].dropna(how="all")
+                    if not df.empty:
+                        result[ticker] = df
+                except (KeyError, AttributeError):
+                    continue
+        set_cached(cache_key, result)
+        return result
+    except Exception:
+        logger.exception("Bulk download failed")
+        return {}
