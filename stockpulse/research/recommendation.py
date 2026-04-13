@@ -48,23 +48,29 @@ def _build_catalyst_summary(signals: dict) -> str:
 def _build_thesis(action: str, signals: dict, composite: float) -> str:
     direction = "Bullish" if composite > 0 else "Bearish"
 
-    # Find strongest SUPPORTING signal (same direction as composite)
+    # Use WEIGHTED contribution to find the actual driver, not raw score
+    def weighted(name, data):
+        return data.get("score", 0) * data.get("weight", 0)
+
+    # Find strongest SUPPORTING signal by weighted contribution
     supporting = [(n, d) for n, d in signals.items()
-                  if (composite > 0 and d.get("score", 0) > 0) or
-                     (composite < 0 and d.get("score", 0) < 0)]
-    # Find strongest OPPOSING signal
+                  if d.get("weight", 0) > 0 and (
+                     (composite > 0 and d.get("score", 0) > 0) or
+                     (composite < 0 and d.get("score", 0) < 0))]
+    # Find strongest OPPOSING signal by weighted contribution
     opposing = [(n, d) for n, d in signals.items()
-                if (composite > 0 and d.get("score", 0) < -10) or
-                   (composite < 0 and d.get("score", 0) > 10)]
+                if d.get("weight", 0) > 0 and (
+                   (composite > 0 and d.get("score", 0) < -10) or
+                   (composite < 0 and d.get("score", 0) > 10))]
 
     if supporting:
-        best = max(supporting, key=lambda x: abs(x[1].get("score", 0)))
+        best = max(supporting, key=lambda x: abs(weighted(x[0], x[1])))
         parts = [f"{direction} ({composite:.1f}) driven by {best[0]} ({best[1]['score']:+.0f})"]
     else:
         parts = [f"Weakly {direction.lower()} ({composite:.1f}), no strong supporting signals"]
 
     if opposing:
-        worst = max(opposing, key=lambda x: abs(x[1].get("score", 0)))
+        worst = max(opposing, key=lambda x: abs(weighted(x[0], x[1])))
         parts.append(f"Headwind: {worst[0]} ({worst[1]['score']:+.0f})")
 
     return ". ".join(parts)
