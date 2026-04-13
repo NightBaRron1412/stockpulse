@@ -1,0 +1,30 @@
+[project]
+name = "stockpulse"
+version = "0.1.0"
+description = "Local stock research and alert system"
+requires-python = ">=3.12"
+dependencies = [
+    "lumibot>=3.0",
+    "yfinance>=0.2",
+    "edgartools>=3.0",
+    "pandas>=2.0",
+    "pandas-ta>=0.3",
+    "anthropic>=0.40",
+    "apscheduler>=3.10,<4.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "jinja2>=3.1",
+    "requests>=2.31",
+    "pytz>=2024.1",
+    "python-telegram-bot>=21.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-mock>=3.14"]
+
+[tool.setuptools.packages.find]
+include = ["stockpulse*"]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
