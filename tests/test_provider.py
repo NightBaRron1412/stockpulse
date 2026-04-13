@@ -1,5 +1,13 @@
+import os
+import pytest
 import pandas as pd
 from stockpulse.data.provider import get_price_history, get_current_quote, get_earnings_dates
+
+# Skip all tests if no Finnhub API key
+pytestmark = pytest.mark.skipif(
+    not os.getenv("FINNHUB_API_KEY"),
+    reason="FINNHUB_API_KEY not set"
+)
 
 def test_get_price_history_returns_dataframe():
     df = get_price_history("AAPL", period="1mo")

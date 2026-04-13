@@ -26,7 +26,10 @@ def _clamp(value: float, lo: float = -100.0, hi: float = 100.0) -> float:
 def calc_earnings_signal(ticker: str) -> float:
     cfg = load_strategies().get("signals", {}).get("earnings", {})
     proximity_days = cfg.get("proximity_days", 14)
-    dates = get_earnings_dates(ticker)
+    try:
+        dates = get_earnings_dates(ticker)
+    except ValueError:
+        return 0.0
     if not dates:
         return 0.0
     for d in dates:
@@ -53,7 +56,10 @@ def calc_sec_filing_signal(ticker: str) -> float:
     return _clamp(score)
 
 def calc_news_sentiment_signal(ticker: str) -> float:
-    news = get_news(ticker)
+    try:
+        news = get_news(ticker)
+    except ValueError:
+        return 0.0
     if not news:
         return 0.0
     positive_count = 0

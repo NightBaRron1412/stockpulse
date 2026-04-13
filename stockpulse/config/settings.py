@@ -24,6 +24,7 @@ def get_config() -> dict:
         "discord_webhook_url": os.getenv("DISCORD_WEBHOOK_URL", ""),
         "trading_enabled": os.getenv("TRADING_ENABLED", "false").lower() == "true",
         "trading_mode": os.getenv("TRADING_MODE", "paper"),
+        "finnhub_api_key": os.getenv("FINNHUB_API_KEY", ""),
         "sec_user_agent": os.getenv("SEC_USER_AGENT", "stockpulse user@example.com"),
         "project_root": str(_ROOT),
         "outputs_dir": str(_ROOT / "outputs"),
