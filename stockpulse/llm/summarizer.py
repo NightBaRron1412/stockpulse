@@ -14,7 +14,19 @@ def _get_client():
             return None
         try:
             import anthropic
-            _client = anthropic.Anthropic(api_key=cfg["llm_api_key"], base_url=cfg["llm_base_url"])
+            import os
+            # AMD Claude API uses Ocp-Apim-Subscription-Key header for auth
+            custom_headers = {}
+            raw_headers = os.getenv("ANTHROPIC_CUSTOM_HEADERS", "")
+            for line in raw_headers.strip().splitlines():
+                if ":" in line:
+                    key, val = line.split(":", 1)
+                    custom_headers[key.strip()] = val.strip()
+            _client = anthropic.Anthropic(
+                api_key=cfg["llm_api_key"],
+                base_url=cfg["llm_base_url"],
+                default_headers=custom_headers,
+            )
         except Exception:
             logger.warning("Failed to initialize Anthropic client")
             return None
