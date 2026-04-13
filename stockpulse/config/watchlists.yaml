@@ -1,0 +1,13 @@
+user:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMD
+  - GOOGL
+  - AMZN
+  - TSLA
+  - META
+
+discovered: []
+
+priority: []

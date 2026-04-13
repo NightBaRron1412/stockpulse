@@ -1,0 +1,54 @@
+signals:
+  rsi:
+    period: 14
+    oversold: 30
+    overbought: 70
+    weight: 0.15
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+    weight: 0.15
+  moving_averages:
+    periods: [20, 50, 200]
+    weight: 0.15
+  volume:
+    spike_threshold: 2.0
+    lookback: 20
+    weight: 0.10
+  breakout:
+    lookback_days: 252
+    weight: 0.10
+  gap:
+    threshold_pct: 2.0
+    weight: 0.05
+  adx:
+    period: 14
+    trend_threshold: 25
+    weight: 0.10
+  earnings:
+    proximity_days: 14
+    weight: 0.05
+  sec_filing:
+    lookback_days: 30
+    weight: 0.10
+  news_sentiment:
+    weight: 0.05
+
+thresholds:
+  buy: 40
+  sell: -40
+  exit: 10
+  confidence_min: 30
+
+scheduling:
+  morning_scan: "09:00"
+  intraday_interval_minutes: 30
+  eod_recap: "16:30"
+  sec_scan_interval_hours: 2
+  timezone: "US/Eastern"
+
+backtesting:
+  max_positions: 10
+  position_size: "equal_weight"
+  initial_cash: 100000
