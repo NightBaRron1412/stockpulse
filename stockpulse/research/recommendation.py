@@ -46,10 +46,28 @@ def _build_catalyst_summary(signals: dict) -> str:
     return ". ".join(parts) if parts else "No significant catalysts detected"
 
 def _build_thesis(action: str, signals: dict, composite: float) -> str:
-    strongest = max(signals.items(), key=lambda x: abs(x[1].get("score", 0)))
-    name, data = strongest
     direction = "Bullish" if composite > 0 else "Bearish"
-    return f"{direction} signal driven primarily by {name} (score: {data['score']:.0f}). Composite: {composite:.1f}"
+
+    # Find strongest SUPPORTING signal (same direction as composite)
+    supporting = [(n, d) for n, d in signals.items()
+                  if (composite > 0 and d.get("score", 0) > 0) or
+                     (composite < 0 and d.get("score", 0) < 0)]
+    # Find strongest OPPOSING signal
+    opposing = [(n, d) for n, d in signals.items()
+                if (composite > 0 and d.get("score", 0) < -10) or
+                   (composite < 0 and d.get("score", 0) > 10)]
+
+    if supporting:
+        best = max(supporting, key=lambda x: abs(x[1].get("score", 0)))
+        parts = [f"{direction} ({composite:.1f}) driven by {best[0]} ({best[1]['score']:+.0f})"]
+    else:
+        parts = [f"Weakly {direction.lower()} ({composite:.1f}), no strong supporting signals"]
+
+    if opposing:
+        worst = max(opposing, key=lambda x: abs(x[1].get("score", 0)))
+        parts.append(f"Headwind: {worst[0]} ({worst[1]['score']:+.0f})")
+
+    return ". ".join(parts)
 
 def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
     signals = compute_all_signals(ticker, df)

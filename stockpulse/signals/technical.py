@@ -14,6 +14,8 @@ def _get_signal_config(name: str) -> dict:
     return strat.get("signals", {}).get(name, {})
 
 def calc_rsi_signal(df: pd.DataFrame) -> float:
+    """RSI signal with zones: <30 bullish, 30-45 mildly bullish, 45-55 neutral,
+    55-70 mildly bearish, >70 bearish. Extreme values (>80, <20) are strongest."""
     cfg = _get_signal_config("rsi")
     period = cfg.get("period", 14)
     oversold = cfg.get("oversold", 30)
@@ -22,10 +24,22 @@ def calc_rsi_signal(df: pd.DataFrame) -> float:
     if rsi is None or rsi.dropna().empty:
         return 0.0
     current_rsi = float(rsi.iloc[-1])
-    midpoint = (oversold + overbought) / 2
-    half_range = (overbought - oversold) / 2
-    score = -((current_rsi - midpoint) / half_range) * 100
-    return _clamp(score)
+
+    # Zone-based scoring (less aggressive than pure linear)
+    if current_rsi <= 20:
+        return 80.0   # extremely oversold = strong buy
+    elif current_rsi <= oversold:
+        return 50.0   # oversold = moderate buy
+    elif current_rsi <= 45:
+        return 20.0   # mildly oversold
+    elif current_rsi <= 55:
+        return 0.0    # neutral zone
+    elif current_rsi <= overbought:
+        return -20.0  # mildly overbought
+    elif current_rsi <= 80:
+        return -50.0  # overbought = moderate sell
+    else:
+        return -80.0  # extremely overbought = strong sell
 
 def calc_macd_signal(df: pd.DataFrame) -> float:
     cfg = _get_signal_config("macd")
@@ -82,6 +96,8 @@ def calc_ma_signal(df: pd.DataFrame) -> float:
     return _clamp(score)
 
 def calc_volume_signal(df: pd.DataFrame) -> float:
+    """Volume signal: above-average volume confirms price direction.
+    Below-average volume = weak signal. Spike (>2x) = strong signal."""
     cfg = _get_signal_config("volume")
     lookback = cfg.get("lookback", 20)
     spike_threshold = cfg.get("spike_threshold", 2.0)
@@ -92,13 +108,21 @@ def calc_volume_signal(df: pd.DataFrame) -> float:
     if avg_vol == 0:
         return 0.0
     ratio = current_vol / avg_vol
-    if ratio < 1.0:
-        return 0.0
     price_change = float(df["Close"].iloc[-1]) - float(df["Close"].iloc[-2])
-    if ratio >= spike_threshold:
-        magnitude = min((ratio - 1.0) * 30, 100.0)
-        return _clamp(magnitude if price_change > 0 else -magnitude)
-    return 0.0
+    direction = 1.0 if price_change > 0 else -1.0
+
+    if ratio < 0.5:
+        return direction * -10.0  # very low volume = slight contrarian
+    elif ratio < 1.0:
+        return 0.0  # below average = neutral
+    elif ratio < spike_threshold:
+        # Above average: mild confirmation of price direction
+        magnitude = (ratio - 1.0) * 30
+        return _clamp(direction * magnitude)
+    else:
+        # Spike: strong confirmation
+        magnitude = min((ratio - 1.0) * 40, 100.0)
+        return _clamp(direction * magnitude)
 
 def calc_breakout_signal(df: pd.DataFrame) -> float:
     cfg = _get_signal_config("breakout")
@@ -122,6 +146,8 @@ def calc_breakout_signal(df: pd.DataFrame) -> float:
         return _clamp((position - 0.5) * 100)
 
 def calc_gap_signal(df: pd.DataFrame) -> float:
+    """Gap signal: gap up/down from prior close. Small gaps (0.5-1%) mild,
+    large gaps (>2%) strong. Direction matches gap direction."""
     cfg = _get_signal_config("gap")
     threshold_pct = cfg.get("threshold_pct", 2.0)
     if len(df) < 2:
@@ -131,12 +157,18 @@ def calc_gap_signal(df: pd.DataFrame) -> float:
     if prev_close == 0:
         return 0.0
     gap_pct = ((current_open - prev_close) / prev_close) * 100
-    if abs(gap_pct) < threshold_pct:
-        return 0.0
-    score = (gap_pct / threshold_pct) * 30
+
+    if abs(gap_pct) < 0.3:
+        return 0.0  # too small to matter
+
+    # Graduated scoring: small gaps get mild scores, big gaps get strong
+    score = (gap_pct / threshold_pct) * 40
     return _clamp(score)
 
 def calc_adx_signal(df: pd.DataFrame) -> float:
+    """Trend strength signal using ADX and directional indicators.
+    ADX >20 = some trend, >25 = solid trend, >40 = strong trend.
+    Direction from +DI/-DI difference."""
     cfg = _get_signal_config("adx")
     period = cfg.get("period", 14)
     trend_threshold = cfg.get("trend_threshold", 25)
@@ -149,10 +181,21 @@ def calc_adx_signal(df: pd.DataFrame) -> float:
     if adx_col not in adx_df.columns:
         return 0.0
     adx_val = float(adx_df[adx_col].iloc[-1])
-    if adx_val < trend_threshold:
-        return 0.0
     plus_di = float(adx_df[dmp_col].iloc[-1]) if dmp_col in adx_df.columns else 0
     minus_di = float(adx_df[dmn_col].iloc[-1]) if dmn_col in adx_df.columns else 0
-    direction = 1.0 if plus_di > minus_di else -1.0
-    strength = min((adx_val - trend_threshold) * 2, 80.0)
-    return _clamp(direction * strength)
+
+    # Direction from DI spread
+    di_diff = plus_di - minus_di
+    direction = 1.0 if di_diff > 0 else -1.0
+
+    # ADX-based strength (lower threshold for partial credit)
+    if adx_val < 15:
+        return 0.0  # no meaningful trend
+    elif adx_val < trend_threshold:
+        # Weak trend — partial score based on DI direction
+        strength = (adx_val - 15) * 2  # 15-25 ADX → 0-20 score
+        return _clamp(direction * strength)
+    else:
+        # Solid trend
+        strength = min((adx_val - 15) * 2.5, 80.0)
+        return _clamp(direction * strength)

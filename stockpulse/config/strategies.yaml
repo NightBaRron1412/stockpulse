@@ -36,10 +36,10 @@ signals:
     weight: 0.05
 
 thresholds:
-  buy: 40
-  sell: -40
+  buy: 30
+  sell: -30
   exit: 10
-  confidence_min: 30
+  confidence_min: 20
 
 scheduling:
   morning_scan: "09:00"
