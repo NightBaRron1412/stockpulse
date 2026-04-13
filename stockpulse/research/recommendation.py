@@ -1,7 +1,7 @@
 """Buy/sell/hold recommendation engine."""
 from datetime import datetime
 import pandas as pd
-from stockpulse.signals.engine import compute_all_signals
+from stockpulse.signals.engine import compute_all_signals, check_confirmation_buckets
 from stockpulse.signals.composite import compute_composite_score, classify_action, compute_confidence
 from stockpulse.research.scoring import compute_invalidation
 
@@ -75,6 +75,14 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
     action = classify_action(composite)
     confidence = compute_confidence(composite)
     invalidation = compute_invalidation(ticker, action, df)
+
+    # Check confirmation buckets
+    confirmation = check_confirmation_buckets(signals)
+
+    # Downgrade BUY to WATCHLIST if not enough buckets confirm
+    if action == "BUY" and not confirmation["passes"]:
+        action = "WATCHLIST"
+
     return {
         "ticker": ticker,
         "timestamp": datetime.now().isoformat(),
@@ -86,6 +94,7 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
         "catalyst_summary": _build_catalyst_summary(signals),
         "invalidation": invalidation,
         "signals": signals,
+        "confirmation": confirmation,
     }
 
 def rank_recommendations(recommendations: list[dict]) -> list[dict]:

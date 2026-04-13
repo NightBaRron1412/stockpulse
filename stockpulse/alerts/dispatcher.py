@@ -24,6 +24,9 @@ def dispatch_alert(alert: dict) -> dict[str, bool]:
 
 def dispatch_recommendations(recommendations: list[dict]) -> None:
     for rec in recommendations:
-        if rec.get("action") in ("BUY", "SELL"):
-            alert = {"type": "recommendation", **rec}
-            dispatch_alert(alert)
+        if rec.get("action") == "BUY":
+            dispatch_alert({"type": "recommendation", **rec})
+        elif rec.get("action") == "SELL":
+            dispatch_alert({"type": "recommendation", **rec})
+        elif rec.get("action") == "WATCHLIST" and rec.get("confidence", 0) >= 45:
+            dispatch_alert({"type": "watchlist", **rec})

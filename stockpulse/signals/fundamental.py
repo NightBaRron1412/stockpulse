@@ -24,19 +24,26 @@ def _clamp(value: float, lo: float = -100.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, value))
 
 def calc_earnings_signal(ticker: str) -> float:
+    """Earnings proximity as a RISK flag, not bullish signal.
+    Per expert: earnings proximity = 0 as directional signal.
+    Returns negative score within blackout window to warn."""
     cfg = load_strategies().get("signals", {}).get("earnings", {})
-    proximity_days = cfg.get("proximity_days", 14)
+    blackout_days = cfg.get("blackout_days", 3)
+
     try:
         dates = get_earnings_dates(ticker)
     except ValueError:
         return 0.0
     if not dates:
         return 0.0
+
     for d in dates:
         days_away = d.get("days_away", 999)
-        if 0 <= days_away <= proximity_days:
-            intensity = 1.0 - (days_away / proximity_days)
-            return _clamp(intensity * 40)
+        if 0 <= days_away <= blackout_days:
+            return -30.0  # inside blackout = risk flag (penalize)
+        elif days_away < 0 and days_away >= -5:
+            return 0.0    # just reported -- neutral, let other signals judge
+
     return 0.0
 
 def calc_sec_filing_signal(ticker: str) -> float:

@@ -12,6 +12,43 @@ from stockpulse.signals.fundamental import (
 
 logger = logging.getLogger(__name__)
 
+
+def check_confirmation_buckets(signals: dict) -> dict:
+    """Check how many signal buckets confirm the direction.
+    Returns {confirming_count, buckets_detail, passes_threshold}."""
+    strat = load_strategies()
+    conf = strat.get("confirmation", {})
+    required = conf.get("require_buckets", 2)
+    bucket_defs = conf.get("buckets", {
+        "trend": ["moving_averages", "macd", "adx"],
+        "participation": ["volume", "breakout"],
+        "catalyst": ["sec_filing"],
+    })
+
+    confirming = 0
+    detail = {}
+
+    for bucket_name, signal_names in bucket_defs.items():
+        bucket_scores = []
+        for name in signal_names:
+            sig = signals.get(name, {})
+            bucket_scores.append(sig.get("score", 0))
+
+        # Bucket confirms if average score > 15
+        avg = sum(bucket_scores) / len(bucket_scores) if bucket_scores else 0
+        confirms = avg > 15
+        detail[bucket_name] = {"avg_score": avg, "confirms": confirms}
+        if confirms:
+            confirming += 1
+
+    return {
+        "confirming_count": confirming,
+        "required": required,
+        "passes": confirming >= required,
+        "buckets": detail,
+    }
+
+
 def compute_all_signals(ticker: str, df: pd.DataFrame) -> dict:
     strat = load_strategies()
     signal_cfg = strat.get("signals", {})

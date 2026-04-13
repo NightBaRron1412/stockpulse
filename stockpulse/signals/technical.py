@@ -14,32 +14,51 @@ def _get_signal_config(name: str) -> dict:
     return strat.get("signals", {}).get(name, {})
 
 def calc_rsi_signal(df: pd.DataFrame) -> float:
-    """RSI signal with zones: <30 bullish, 30-45 mildly bullish, 45-55 neutral,
-    55-70 mildly bearish, >70 bearish. Extreme values (>80, <20) are strongest."""
+    """RSI signal -- trend-aware zones per expert:
+    In uptrends (price > 50 SMA), RSI 40-50 = buyable pullback.
+    Overbought >70 is NOT automatic sell in uptrends.
+    For mean-reversion: 20/80 extremes only."""
     cfg = _get_signal_config("rsi")
     period = cfg.get("period", 14)
-    oversold = cfg.get("oversold", 30)
-    overbought = cfg.get("overbought", 70)
     rsi = ta.rsi(df["Close"], length=period)
     if rsi is None or rsi.dropna().empty:
         return 0.0
     current_rsi = float(rsi.iloc[-1])
 
-    # Zone-based scoring (less aggressive than pure linear)
-    if current_rsi <= 20:
-        return 80.0   # extremely oversold = strong buy
-    elif current_rsi <= oversold:
-        return 50.0   # oversold = moderate buy
-    elif current_rsi <= 45:
-        return 20.0   # mildly oversold
-    elif current_rsi <= 55:
-        return 0.0    # neutral zone
-    elif current_rsi <= overbought:
-        return -20.0  # mildly overbought
-    elif current_rsi <= 80:
-        return -50.0  # overbought = moderate sell
+    # Determine trend context
+    sma50 = ta.sma(df["Close"], length=50)
+    in_uptrend = False
+    if sma50 is not None and not sma50.dropna().empty:
+        in_uptrend = float(df["Close"].iloc[-1]) > float(sma50.iloc[-1])
+
+    if in_uptrend:
+        # In uptrend: pullback to 40-50 is bullish entry zone
+        if current_rsi <= 20:
+            return 80.0
+        elif current_rsi <= 40:
+            return 50.0
+        elif current_rsi <= 50:
+            return 30.0   # pullback zone -- still buyable
+        elif current_rsi <= 70:
+            return 0.0    # normal range in uptrend
+        elif current_rsi <= 80:
+            return -15.0  # mildly stretched but NOT sell in uptrend
+        else:
+            return -40.0  # extreme overbought even in uptrend
     else:
-        return -80.0  # extremely overbought = strong sell
+        # In downtrend: standard zones
+        if current_rsi <= 20:
+            return 60.0   # deeply oversold -- potential reversal
+        elif current_rsi <= 30:
+            return 30.0
+        elif current_rsi <= 50:
+            return 0.0
+        elif current_rsi <= 70:
+            return -20.0
+        elif current_rsi <= 80:
+            return -50.0
+        else:
+            return -80.0
 
 def calc_macd_signal(df: pd.DataFrame) -> float:
     cfg = _get_signal_config("macd")
@@ -66,84 +85,160 @@ def calc_macd_signal(df: pd.DataFrame) -> float:
     return _clamp(score)
 
 def calc_ma_signal(df: pd.DataFrame) -> float:
+    """Moving average signal using EMAs for tactical, SMA for regime.
+    20 EMA = tactical trend, 50 SMA = swing trend, 200 SMA = regime filter.
+    Expert says don't overweight golden/death crosses for 1-4 week horizon."""
     cfg = _get_signal_config("moving_averages")
-    periods = cfg.get("periods", [20, 50, 200])
     close = df["Close"]
     current_price = float(close.iloc[-1])
     score = 0.0
-    smas = {}
-    for p in periods:
-        sma = ta.sma(close, length=p)
-        if sma is not None and not sma.dropna().empty:
-            smas[p] = float(sma.iloc[-1])
-    for p, sma_val in smas.items():
-        if current_price > sma_val:
-            score += 20
-        else:
-            score -= 20
-    if 50 in smas and 200 in smas:
-        sma50 = ta.sma(close, length=50)
-        sma200 = ta.sma(close, length=200)
-        if sma50 is not None and sma200 is not None and len(sma50.dropna()) > 1 and len(sma200.dropna()) > 1:
-            curr_50 = float(sma50.iloc[-1])
-            prev_50 = float(sma50.iloc[-2])
-            curr_200 = float(sma200.iloc[-1])
-            prev_200 = float(sma200.iloc[-2])
-            if prev_50 <= prev_200 and curr_50 > curr_200:
-                score += 30
-            elif prev_50 >= prev_200 and curr_50 < curr_200:
-                score -= 30
+
+    ema20 = ta.ema(close, length=20)
+    sma50 = ta.sma(close, length=50)
+    sma200 = ta.sma(close, length=200)
+
+    ema20_val = float(ema20.iloc[-1]) if ema20 is not None and not ema20.dropna().empty else None
+    sma50_val = float(sma50.iloc[-1]) if sma50 is not None and not sma50.dropna().empty else None
+    sma200_val = float(sma200.iloc[-1]) if sma200 is not None and not sma200.dropna().empty else None
+
+    # Price vs EMAs/SMAs
+    if ema20_val and current_price > ema20_val:
+        score += 20  # above tactical trend
+    elif ema20_val:
+        score -= 20
+
+    if sma50_val and current_price > sma50_val:
+        score += 20  # above swing trend
+    elif sma50_val:
+        score -= 20
+
+    # 200 SMA as regime filter (heavier weight)
+    if sma200_val and current_price > sma200_val:
+        score += 25  # bullish regime
+    elif sma200_val:
+        score -= 25  # bearish regime
+
+    # EMA/SMA alignment bonus (20 > 50 > 200 = fully aligned uptrend)
+    if ema20_val and sma50_val and sma200_val:
+        if ema20_val > sma50_val > sma200_val:
+            score += 15  # fully aligned uptrend
+        elif ema20_val < sma50_val < sma200_val:
+            score -= 15  # fully aligned downtrend
+
     return _clamp(score)
 
 def calc_volume_signal(df: pd.DataFrame) -> float:
-    """Volume signal: above-average volume confirms price direction.
-    Below-average volume = weak signal. Spike (>2x) = strong signal."""
+    """Volume signal using relative volume (RVOL).
+    RVOL >= 1.5 = confirmation. RVOL >= 2.0 = strong.
+    Direction matches price direction. Tracks distribution days."""
     cfg = _get_signal_config("volume")
     lookback = cfg.get("lookback", 20)
-    spike_threshold = cfg.get("spike_threshold", 2.0)
+    rvol_confirm = cfg.get("rvol_confirm", 1.5)
+    rvol_strong = cfg.get("rvol_strong", 2.0)
+
     if len(df) < lookback + 1:
         return 0.0
+
     current_vol = float(df["Volume"].iloc[-1])
     avg_vol = float(df["Volume"].iloc[-lookback - 1 : -1].mean())
     if avg_vol == 0:
         return 0.0
-    ratio = current_vol / avg_vol
+
+    rvol = current_vol / avg_vol
     price_change = float(df["Close"].iloc[-1]) - float(df["Close"].iloc[-2])
     direction = 1.0 if price_change > 0 else -1.0
 
-    if ratio < 0.5:
-        return direction * -10.0  # very low volume = slight contrarian
-    elif ratio < 1.0:
-        return 0.0  # below average = neutral
-    elif ratio < spike_threshold:
-        # Above average: mild confirmation of price direction
-        magnitude = (ratio - 1.0) * 30
-        return _clamp(direction * magnitude)
-    else:
-        # Spike: strong confirmation
-        magnitude = min((ratio - 1.0) * 40, 100.0)
-        return _clamp(direction * magnitude)
+    # Check for distribution days (down days on heavy volume = bearish)
+    distribution_count = 0
+    for i in range(-5, 0):
+        if i >= -len(df):
+            day_change = float(df["Close"].iloc[i]) - float(df["Close"].iloc[i - 1])
+            day_vol = float(df["Volume"].iloc[i])
+            if day_change < 0 and day_vol > avg_vol * 1.2:
+                distribution_count += 1
+
+    score = 0.0
+    if rvol >= rvol_strong:
+        score = direction * 80.0
+    elif rvol >= rvol_confirm:
+        score = direction * 50.0
+    elif rvol >= 1.0:
+        score = direction * 15.0
+    elif rvol < 0.5:
+        score = direction * -10.0  # very low volume = contrarian hint
+
+    # Penalize for distribution pattern
+    if distribution_count >= 3:
+        score -= 20.0
+
+    return _clamp(score)
 
 def calc_breakout_signal(df: pd.DataFrame) -> float:
+    """Multi-timeframe breakout: 20-day, 55-day, 52-week.
+    Requires volume confirmation (RVOL >= 1.5).
+    Fakeout detection: if it fails back under within 1-3 days, penalize."""
     cfg = _get_signal_config("breakout")
-    lookback = cfg.get("lookback_days", 252)
-    if len(df) < lookback:
-        lookback = len(df) - 1
-    if lookback < 20:
+    periods = cfg.get("periods", [20, 55, 252])
+    require_volume = cfg.get("require_volume", True)
+    rvol_min = cfg.get("rvol_min", 1.5)
+
+    if len(df) < max(periods, default=20) + 1:
+        # Use available periods
+        periods = [p for p in periods if p < len(df)]
+    if not periods:
         return 0.0
+
     current_price = float(df["Close"].iloc[-1])
-    high_52w = float(df["High"].iloc[-lookback:].max())
-    low_52w = float(df["Low"].iloc[-lookback:].min())
-    price_range = high_52w - low_52w
-    if price_range == 0:
-        return 0.0
-    position = (current_price - low_52w) / price_range
-    if position > 0.95:
-        return _clamp(80.0)
-    elif position < 0.05:
-        return _clamp(-80.0)
-    else:
-        return _clamp((position - 0.5) * 100)
+    current_vol = float(df["Volume"].iloc[-1])
+    avg_vol = float(df["Volume"].iloc[-21:-1].mean()) if len(df) > 21 else 1.0
+    rvol = current_vol / avg_vol if avg_vol > 0 else 0.0
+
+    score = 0.0
+    breakout_count = 0
+
+    for period in periods:
+        lookback = df.iloc[-period:]
+        high = float(lookback["High"].max())
+        low = float(lookback["Low"].min())
+        price_range = high - low
+        if price_range == 0:
+            continue
+
+        position = (current_price - low) / price_range
+
+        if position > 0.95:  # near high
+            breakout_count += 1
+            if period <= 20:
+                score += 25
+            elif period <= 55:
+                score += 35
+            else:
+                score += 40  # 52-week breakout is strongest
+        elif position < 0.05:  # near low
+            if period <= 20:
+                score -= 20
+            elif period <= 55:
+                score -= 30
+            else:
+                score -= 35
+
+    # Volume confirmation
+    if breakout_count > 0 and require_volume:
+        if rvol >= rvol_min:
+            score *= 1.3  # confirmed breakout
+        else:
+            score *= 0.5  # unconfirmed -- weaker
+
+    # Fakeout check: was there a breakout 1-3 days ago that failed?
+    if len(df) > 5:
+        for day_back in range(2, min(5, len(df))):
+            prev_price = float(df["Close"].iloc[-day_back])
+            prev_high_20 = float(df["High"].iloc[-20 - day_back:-day_back].max()) if len(df) > 20 + day_back else 0
+            if prev_price > prev_high_20 > 0 and current_price < prev_high_20:
+                score -= 25  # fakeout penalty
+                break
+
+    return _clamp(score)
 
 def calc_gap_signal(df: pd.DataFrame) -> float:
     """Gap signal: gap up/down from prior close. Small gaps (0.5-1%) mild,

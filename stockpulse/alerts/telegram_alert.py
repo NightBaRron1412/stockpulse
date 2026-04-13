@@ -10,7 +10,7 @@ def _format_message(alert: dict) -> str:
     action = alert.get("action", "???")
     confidence = alert.get("confidence", 0)
     thesis = alert.get("thesis", "")
-    emoji = {"BUY": "\u2705", "SELL": "\ud83d\udd34", "HOLD": "\u26a0\ufe0f"}.get(action, "\u2139\ufe0f")
+    emoji = {"BUY": "\u2705", "SELL": "\ud83d\udd34", "HOLD": "\u26a0\ufe0f", "WATCHLIST": "\ud83d\udd0d"}.get(action, "\u2139\ufe0f")
     return (f"{emoji} *{ticker}* -- {action} (confidence: {confidence}%)\n\n"
             f"{thesis}\n\n_{alert.get('type', 'signal')}_")
 

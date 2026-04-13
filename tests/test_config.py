@@ -28,5 +28,5 @@ def test_settings_loads_strategies():
     strat = load_strategies()
     assert "signals" in strat
     assert "thresholds" in strat
-    assert strat["thresholds"]["buy"] == 30
-    assert strat["thresholds"]["sell"] == -30
+    assert strat["thresholds"]["buy"] == 55
+    assert strat["thresholds"]["sell"] == -65
