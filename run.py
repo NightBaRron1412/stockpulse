@@ -1,0 +1,85 @@
+"""StockPulse main entrypoint -- starts the scheduler and runs scans."""
+import argparse
+import logging
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+def setup_logging(level: str = "INFO"):
+    log_dir = Path(__file__).parent / "outputs" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(level=getattr(logging, level.upper()),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[logging.StreamHandler(), logging.FileHandler(log_dir / "stockpulse.log")])
+
+def run_once():
+    from stockpulse.scanners.market_scanner import run_full_scan
+    from stockpulse.reports.daily import generate_morning_report
+    from stockpulse.alerts.dispatcher import dispatch_recommendations
+    logging.info("Running one-shot full scan...")
+    recommendations = run_full_scan()
+    report_path = generate_morning_report(recommendations)
+    dispatch_recommendations(recommendations)
+    buys = [r for r in recommendations if r["action"] == "BUY"]
+    sells = [r for r in recommendations if r["action"] == "SELL"]
+    print(f"\nScan complete: {len(recommendations)} tickers")
+    print(f"BUY signals: {len(buys)}")
+    print(f"SELL signals: {len(sells)}")
+    print(f"Report: {report_path}")
+    if buys:
+        print("\nTop BUY signals:")
+        for r in sorted(buys, key=lambda x: x["confidence"], reverse=True)[:5]:
+            print(f"  {r['ticker']:6s} confidence={r['confidence']}% score={r['composite_score']:.1f}")
+
+def run_scheduler():
+    from apscheduler.schedulers.blocking import BlockingScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from stockpulse.config.settings import load_strategies
+    from stockpulse.scheduler.jobs import morning_scan_job, intraday_check_job, eod_recap_job, sec_scan_job
+    strat = load_strategies()
+    sched_cfg = strat.get("scheduling", {})
+    tz = sched_cfg.get("timezone", "US/Eastern")
+    scheduler = BlockingScheduler(timezone=tz)
+    morning_time = sched_cfg.get("morning_scan", "09:00")
+    h, m = morning_time.split(":")
+    scheduler.add_job(morning_scan_job, CronTrigger(hour=int(h), minute=int(m), day_of_week="mon-fri", timezone=tz),
+        id="morning_scan", name="Morning Full Scan")
+    interval_min = sched_cfg.get("intraday_interval_minutes", 30)
+    scheduler.add_job(intraday_check_job, CronTrigger(minute=f"*/{interval_min}", hour="9-16",
+        day_of_week="mon-fri", timezone=tz), id="intraday_check", name="Intraday Check")
+    eod_time = sched_cfg.get("eod_recap", "16:30")
+    h, m = eod_time.split(":")
+    scheduler.add_job(eod_recap_job, CronTrigger(hour=int(h), minute=int(m), day_of_week="mon-fri", timezone=tz),
+        id="eod_recap", name="EOD Recap")
+    sec_interval = sched_cfg.get("sec_scan_interval_hours", 2)
+    scheduler.add_job(sec_scan_job, CronTrigger(hour=f"*/{sec_interval}", day_of_week="mon-fri", timezone=tz),
+        id="sec_scan", name="SEC Filing Scan")
+    logging.info("StockPulse scheduler started with %d jobs:", len(scheduler.get_jobs()))
+    for job in scheduler.get_jobs():
+        logging.info("  - %s: %s", job.name, job.trigger)
+    print("StockPulse scheduler is running. Press Ctrl+C to stop.")
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Scheduler stopped.")
+
+def main():
+    parser = argparse.ArgumentParser(description="StockPulse -- Stock Research & Alert System")
+    parser.add_argument("mode", choices=["scan", "schedule", "backtest"],
+        help="scan: one-shot scan | schedule: start scheduler | backtest: run backtest")
+    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument("--start", help="Backtest start date (YYYY-MM-DD)")
+    parser.add_argument("--end", help="Backtest end date (YYYY-MM-DD)")
+    args = parser.parse_args()
+    setup_logging(args.log_level)
+    if args.mode == "scan":
+        run_once()
+    elif args.mode == "schedule":
+        run_scheduler()
+    elif args.mode == "backtest":
+        from stockpulse.backtests.runner import run_backtest
+        run_backtest(start_date=args.start, end_date=args.end)
+
+if __name__ == "__main__":
+    main()
