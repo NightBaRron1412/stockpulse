@@ -36,7 +36,7 @@ def run_scheduler():
     from apscheduler.schedulers.blocking import BlockingScheduler
     from apscheduler.triggers.cron import CronTrigger
     from stockpulse.config.settings import load_strategies
-    from stockpulse.scheduler.jobs import morning_scan_job, intraday_check_job, eod_recap_job, sec_scan_job
+    from stockpulse.scheduler.jobs import morning_scan_job, intraday_check_job, eod_recap_job, sec_scan_job, portfolio_check_job
     strat = load_strategies()
     sched_cfg = strat.get("scheduling", {})
     tz = sched_cfg.get("timezone", "US/Eastern")
@@ -55,6 +55,18 @@ def run_scheduler():
     sec_interval = sched_cfg.get("sec_scan_interval_hours", 2)
     scheduler.add_job(sec_scan_job, CronTrigger(hour=f"*/{sec_interval}", day_of_week="mon-fri", timezone=tz),
         id="sec_scan", name="SEC Filing Scan")
+    from stockpulse.scheduler.jobs import portfolio_check_job
+    scheduler.add_job(
+        portfolio_check_job,
+        CronTrigger(
+            minute=f"*/{interval_min}",
+            hour="9-16",
+            day_of_week="mon-fri",
+            timezone=tz,
+        ),
+        id="portfolio_check",
+        name="Portfolio Check",
+    )
     logging.info("StockPulse scheduler started with %d jobs:", len(scheduler.get_jobs()))
     for job in scheduler.get_jobs():
         logging.info("  - %s: %s", job.name, job.trigger)

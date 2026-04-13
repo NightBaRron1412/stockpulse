@@ -73,3 +73,12 @@ def sec_scan_job():
                     "catalyst_summary": str(data["filings"][:3]), "invalidation": ""})
     except Exception:
         logger.exception("SEC scan failed")
+
+def portfolio_check_job():
+    """Check portfolio positions for P&L milestones and invalidation."""
+    logger.info("--- Portfolio check ---")
+    try:
+        from stockpulse.portfolio.tracker import dispatch_portfolio_alerts
+        dispatch_portfolio_alerts()
+    except Exception:
+        logger.exception("Portfolio check failed")

@@ -44,3 +44,15 @@ def load_strategies() -> dict:
     path = _CONFIG_DIR / "strategies.yaml"
     with open(path) as f:
         return yaml.safe_load(f)
+
+def load_portfolio() -> dict:
+    path = _CONFIG_DIR / "portfolio.yaml"
+    if not path.exists():
+        return {"positions": [], "alerts": {"pnl_milestones": [5, 10, 15, 25, 50], "check_invalidation": True}}
+    with open(path) as f:
+        return yaml.safe_load(f) or {"positions": []}
+
+def save_portfolio(data: dict) -> None:
+    path = _CONFIG_DIR / "portfolio.yaml"
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False)
