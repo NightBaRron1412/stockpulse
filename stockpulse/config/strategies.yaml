@@ -95,7 +95,7 @@ risk:
   earnings_blackout_days: 3
 
 scheduling:
-  morning_scan: "09:00"
+  morning_scan: "09:35"
   intraday_interval_minutes: 30
   eod_recap: "16:30"
   sec_scan_interval_hours: 2
