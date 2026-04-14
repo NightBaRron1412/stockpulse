@@ -9,22 +9,22 @@ signals:
     fast: 12
     slow: 26
     signal: 9
-    weight: 0.11
+    weight: 0.08
   moving_averages:
     fast_ema: 20
     medium_sma: 50
     slow_sma: 200
-    weight: 0.14
+    weight: 0.11
   volume:
     rvol_confirm: 1.5     # RVOL >= 1.5 = valid confirmation
     rvol_strong: 2.0      # RVOL >= 2.0 = strong catalyst
     lookback: 20
-    weight: 0.17
+    weight: 0.15
   breakout:
     periods: [20, 55, 252]  # multi-timeframe breakouts
     require_volume: true
     rvol_min: 1.5
-    weight: 0.20
+    weight: 0.16
   gap:
     threshold_pct: 0.5
     weight: 0.04
@@ -43,8 +43,8 @@ signals:
     weight: 0.00           # keyword-based is noise per expert
   relative_strength:
     benchmark: "SPY"
-    periods: [20, 50]      # compare over 20 and 50 day windows
-    weight: 0.00           # will be enabled once implemented
+    periods: [20, 60]
+    weight: 0.12
 
 thresholds:
   buy: 55
@@ -56,7 +56,7 @@ thresholds:
 confirmation:
   require_buckets: 2       # need 2 of 3 buckets confirming
   buckets:
-    trend: [moving_averages, macd, adx]
+    trend: [moving_averages, macd, adx, relative_strength]
     participation: [volume, breakout]
     catalyst: [sec_filing]
 

@@ -50,3 +50,11 @@ def test_adx_signal_returns_bounded_score():
     df = _make_price_df()
     score = calc_adx_signal(df)
     assert -100 <= score <= 100
+
+
+def test_relative_strength_returns_bounded_score():
+    """Test RS signal with synthetic data (no universe, uses fallback percentile)."""
+    from stockpulse.signals.relative_strength import calc_relative_strength
+    df = _make_price_df(n=100)
+    score = calc_relative_strength("TEST", df)
+    assert -100 <= score <= 100

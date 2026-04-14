@@ -9,6 +9,7 @@ from stockpulse.signals.technical import (
 from stockpulse.signals.fundamental import (
     calc_earnings_signal, calc_sec_filing_signal, calc_news_sentiment_signal,
 )
+from stockpulse.signals.relative_strength import calc_relative_strength
 
 logger = logging.getLogger(__name__)
 
@@ -78,4 +79,14 @@ def compute_all_signals(ticker: str, df: pd.DataFrame) -> dict:
         except Exception:
             logger.debug("Signal %s failed for %s", name, ticker)
             signals[name] = {"score": 0.0, "weight": 0.0, "value": None}
+
+    # Relative strength vs SPY + sector (needs ticker name and DataFrame)
+    try:
+        rs_score = calc_relative_strength(ticker, df)
+        rs_weight = signal_cfg.get("relative_strength", {}).get("weight", 0.12)
+        signals["relative_strength"] = {"score": rs_score, "weight": rs_weight, "value": rs_score}
+    except Exception:
+        logger.debug("Relative strength failed for %s", ticker)
+        signals["relative_strength"] = {"score": 0.0, "weight": 0.0, "value": None}
+
     return signals
