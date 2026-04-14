@@ -19,6 +19,29 @@ function reportTypeBadge(type: string): string {
   }
 }
 
+function reportTypeLabel(type: string): string {
+  switch (type) {
+    case "morning": return "Morning Scan";
+    case "eod": return "End of Day";
+    case "intraday": return "Intraday Update";
+    case "weekly": return "Weekly Digest";
+    default: return type;
+  }
+}
+
+function formatReportTitle(report: Report): string {
+  const label = reportTypeLabel(report.type);
+  // Extract time from intraday filenames like "2026-04-14-1001-intraday.md"
+  if (report.type === "intraday" && report.filename) {
+    const match = report.filename.match(/(\d{4})-intraday/);
+    if (match) {
+      const time = match[1];
+      return `${label} (${time.slice(0, 2)}:${time.slice(2)})`;
+    }
+  }
+  return label;
+}
+
 export default function ReportsPage() {
   const { data: reports, loading, error } = usePolling<Report[]>(api.reports, 60000);
   const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
@@ -78,10 +101,10 @@ export default function ReportsPage() {
           No reports generated yet -- reports appear after market scans
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 min-h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6" style={{ minHeight: "calc(100vh - 160px)" }}>
           {/* Report list (left 30%) */}
           <div className="lg:col-span-3 glass-card p-0 overflow-hidden">
-            <ScrollArea className="h-[600px]">
+            <ScrollArea style={{ height: "calc(100vh - 200px)" }}>
               <div className="divide-y divide-slate-700/30">
                 {sortedDates.map((date) => (
                   <div key={date}>
@@ -102,7 +125,7 @@ export default function ReportsPage() {
                             {r.type}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-200 truncate">{r.title}</p>
+                        <p className="text-sm text-slate-200 truncate">{formatReportTitle(r)}</p>
                       </button>
                     ))}
                   </div>
@@ -127,7 +150,7 @@ export default function ReportsPage() {
                 </div>
               </div>
             ) : (
-              <ScrollArea className="h-[600px]">
+              <ScrollArea style={{ height: "calc(100vh - 200px)" }}>
                 <div className="p-6 prose-dark">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
