@@ -183,7 +183,7 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-200 leading-snug">{evt.message}</p>
                         <p className="text-[11px] text-slate-500 mt-0.5 font-mono-data">
-                          {evt.timestamp ? (() => { try { return new Date(evt.timestamp).toLocaleString(); } catch { return evt.timestamp; } })() : "--"}
+                          {evt.timestamp || "--"}
                         </p>
                       </div>
                     </div>
