@@ -91,16 +91,55 @@ def portfolio_check_job():
 
 
 def signal_tracking_job():
-    """Check outcomes for tracked signals that have reached their checkpoint days."""
+    """Check outcomes for tracked signals and send validation milestones to Telegram."""
     logger.info("--- Signal tracking check ---")
     try:
-        from stockpulse.research.tracker import check_signal_outcomes
+        from stockpulse.research.tracker import check_signal_outcomes, _load_tracker
         results = check_signal_outcomes()
         total = sum(results.values())
         if total > 0:
             logger.info("Signal outcomes resolved: %s", results)
+
+        # Send validation report at milestones: 30, 50, 75, 100, 150, 250 BUY signals
+        tracker = _load_tracker()
+        validation = tracker.get("validation", {})
+        sample = validation.get("sample_size", {})
+        n_buy = sample.get("buy_signals", 0)
+
+        milestones = [30, 50, 75, 100, 150, 250]
+        # Check if we just crossed a milestone
+        prev_count = n_buy - total  # approximate previous count
+        for m in milestones:
+            if prev_count < m <= n_buy:
+                _send_validation_report(n_buy, validation)
+                break
+
     except Exception:
         logger.exception("Signal tracking check failed")
+
+
+def _send_validation_report(n_buy: int, validation: dict):
+    """Send a simple ping when validation milestones are reached."""
+    status = validation.get("status", "collecting")
+    phase = validation.get("sample_size", {}).get("phase", "collecting")
+
+    if status == "working":
+        msg = f"Validation ready: {n_buy} BUY signals analyzed. VERDICT: MODEL IS WORKING. Run 'python run.py scan' or check outputs/reports/ for full stats."
+    elif status == "needs_calibration":
+        msg = f"Validation ready: {n_buy} BUY signals analyzed. VERDICT: NEEDS CALIBRATION. Check outputs/reports/ for details."
+    else:
+        msg = f"Validation milestone: {n_buy} BUY signals tracked ({phase} phase). Full report in outputs/reports/."
+
+    dispatch_alert({
+        "ticker": "VALIDATION",
+        "action": "INFO",
+        "confidence": 100,
+        "thesis": msg,
+        "type": "validation_milestone",
+        "technical_summary": "",
+        "catalyst_summary": "",
+        "invalidation": "",
+    })
 
 
 def weekly_digest_job():
