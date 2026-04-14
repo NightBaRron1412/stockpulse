@@ -66,7 +66,7 @@ def calc_sec_filing_signal(ticker: str) -> float:
 def calc_news_sentiment_signal(ticker: str) -> float:
     """News sentiment signal using LLM event classification.
 
-    Uses AMD Claude API for structured analysis when available,
+    Uses Claude API for structured analysis when available,
     falls back to keyword counting (with lower scores) when not.
     """
     try:

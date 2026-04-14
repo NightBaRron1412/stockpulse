@@ -1,4 +1,4 @@
-"""LLM-powered news event classification using AMD Claude API.
+"""LLM-powered news event classification using Claude API.
 
 Replaces keyword-based sentiment with structured event analysis.
 Expert recommended classifying event TYPE, not just sentiment:

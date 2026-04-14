@@ -1,4 +1,4 @@
-"""LLM summarizer using AMD Claude API via Anthropic SDK."""
+"""LLM summarizer using Claude API via Anthropic SDK."""
 import logging
 from stockpulse.config.settings import get_config
 from stockpulse.llm.fallback import fallback_thesis, fallback_catalyst_summary
@@ -15,7 +15,7 @@ def _get_client():
         try:
             import anthropic
             import os
-            # AMD Claude API uses Ocp-Apim-Subscription-Key header for auth
+            # Support custom auth headers (e.g. Ocp-Apim-Subscription-Key)
             custom_headers = {}
             raw_headers = os.getenv("ANTHROPIC_CUSTOM_HEADERS", "")
             for line in raw_headers.strip().splitlines():

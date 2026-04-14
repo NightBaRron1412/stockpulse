@@ -14,7 +14,7 @@ def get_config() -> dict:
         "yahoo_rate_limit": int(os.getenv("YAHOO_RATE_LIMIT", "2000")),
         "cache_ttl_minutes": int(os.getenv("CACHE_TTL_MINUTES", "15")),
         "llm_enabled": os.getenv("LLM_ENABLED", "true").lower() == "true",
-        "llm_base_url": os.getenv("LLM_BASE_URL", os.getenv("ANTHROPIC_BASE_URL", "https://llm-api.amd.com/Anthropic")),
+        "llm_base_url": os.getenv("LLM_BASE_URL", os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")),
         "llm_api_key": os.getenv("LLM_API_KEY", "").strip() or os.getenv("ANTHROPIC_API_KEY", ""),
         "llm_model": os.getenv("LLM_MODEL", "Claude-Sonnet-4.6"),
         "alerts_telegram": os.getenv("ALERTS_TELEGRAM", "false").lower() == "true",

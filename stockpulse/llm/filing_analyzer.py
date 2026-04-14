@@ -1,4 +1,4 @@
-"""LLM-powered SEC filing directional analysis using AMD Claude API.
+"""LLM-powered SEC filing directional analysis using Claude API.
 
 The expert said: "Then direction comes from the text and tape."
 This module uses Claude to determine if an 8-K filing is bullish, bearish, or neutral.
