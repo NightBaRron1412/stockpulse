@@ -12,20 +12,17 @@ def _format_message(alert: dict) -> str:
     thesis = alert.get("thesis", "")
     emoji = {"BUY": "\u2705", "SELL": "\ud83d\udd34", "HOLD": "\u26a0\ufe0f",
              "WATCHLIST": "\ud83d\udd0d", "CAUTION": "\ud83d\udea8"}.get(action, "\u2139\ufe0f")
-    msg = (
-        f"{emoji} *{ticker}* -- {action} (confidence: {confidence}%)\n\n"
-        f"{thesis}\n\n_{alert.get('type', 'signal')}_"
-    )
-    # Telegram max message length is 4096 chars
+    alert_type = alert.get("type", "signal")
+    msg = f"{emoji} {ticker} — {action} ({confidence}%)\n\n{thesis}\n\n[{alert_type}]"
     if len(msg) > 4000:
-        msg = msg[:3990] + "..._"
+        msg = msg[:3997] + "..."
     return msg
 
 async def _send_async(token: str, chat_id: str, text: str) -> bool:
     try:
         from telegram import Bot
         bot = Bot(token=token)
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+        await bot.send_message(chat_id=chat_id, text=text)
         return True
     except Exception:
         logger.exception("Telegram send failed")
