@@ -44,29 +44,73 @@ def _get_latest_scan() -> list[dict]:
 
 
 def _parse_activity_log() -> list[dict]:
-    """Parse system log for activity events."""
+    """Parse system log into clean, human-readable activity events."""
     log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
     if not log_path.exists():
         return []
     events = []
     try:
         lines = log_path.read_text().strip().split("\n")
-        keywords = ["MORNING SCAN", "Intraday", "EOD", "SEC", "Portfolio",
-                     "discovered", "changes detected", "complete", "milestone",
-                     "Weekly", "Signal"]
         for line in lines[-500:]:
-            if any(kw in line for kw in keywords):
-                # Parse: "2026-04-14 09:35:00,000 [INFO] module: message"
+            ts = line[:19]  # "2026-04-14 09:35:00"
+            # Only process meaningful events, skip APScheduler noise
+            if "MORNING SCAN START" in line:
+                events.append({"timestamp": ts, "type": "scan", "message": "Morning scan started"})
+            elif "Scan complete:" in line:
                 try:
-                    ts = line[:23]
-                    msg = line.split(": ", 1)[1] if ": " in line else line
-                    event_type = "scan" if "SCAN" in line else "portfolio" if "Portfolio" in line else "alert" if "discovered" in line else "system"
-                    events.append({"timestamp": ts, "type": event_type, "message": msg[:200]})
+                    msg = line.split("Scan complete: ")[1].split(".")[0]
+                    events.append({"timestamp": ts, "type": "scan", "message": f"Scan complete — {msg}"})
+                except Exception:
+                    events.append({"timestamp": ts, "type": "scan", "message": "Scan completed"})
+            elif "Scanned " in line and "/" in line:
+                try:
+                    progress = line.split("Scanned ")[1].split(" ")[0]
+                    events.append({"timestamp": ts, "type": "scan", "message": f"Scanning... {progress}"})
+                except Exception:
+                    pass
+            elif "Morning scan complete:" in line:
+                try:
+                    msg = line.split("Morning scan complete: ")[1]
+                    events.append({"timestamp": ts, "type": "scan", "message": f"Morning scan: {msg[:100]}"})
+                except Exception:
+                    pass
+            elif "changes detected" in line:
+                try:
+                    count = line.split("Intraday: ")[1].split(" ")[0]
+                    events.append({"timestamp": ts, "type": "alert", "message": f"Intraday: {count} signal changes detected"})
+                except Exception:
+                    events.append({"timestamp": ts, "type": "alert", "message": "Intraday changes detected"})
+            # Skip "no changes" — not interesting for the activity feed
+            elif "Auto-discovered" in line:
+                try:
+                    msg = line.split("Auto-discovered ")[1]
+                    events.append({"timestamp": ts, "type": "alert", "message": f"Discovered {msg[:80]}"})
+                except Exception:
+                    events.append({"timestamp": ts, "type": "alert", "message": "New tickers discovered"})
+            elif "milestone alerts" in line:
+                try:
+                    msg = line.split("Portfolio check: ")[1]
+                    if "0 milestone" not in msg or "0 invalidation" not in msg:
+                        events.append({"timestamp": ts, "type": "portfolio", "message": f"Portfolio: {msg[:80]}"})
+                except Exception:
+                    pass
+            elif "EOD RECAP START" in line:
+                events.append({"timestamp": ts, "type": "scan", "message": "EOD recap started"})
+            elif "EOD recap complete" in line:
+                events.append({"timestamp": ts, "type": "scan", "message": "EOD recap completed"})
+            elif "WEEKLY DIGEST" in line:
+                events.append({"timestamp": ts, "type": "system", "message": "Weekly digest generated"})
+            elif "SEC filing scan" in line and "---" in line:
+                events.append({"timestamp": ts, "type": "system", "message": "SEC filing scan started"})
+            elif "Auto-removed" in line:
+                try:
+                    msg = line.split("Auto-removed ")[1]
+                    events.append({"timestamp": ts, "type": "system", "message": f"Removed {msg[:80]}"})
                 except Exception:
                     pass
     except Exception:
         pass
-    return events[-50:]
+    return events[-30:]
 
 
 def _get_scan_status() -> dict:
