@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Recommendation, Activity, Portfolio } from "@/lib/types";
+import { TickerLink } from "@/components/ticker-link";
 
 interface DashboardData {
   top_signals: Recommendation[];
@@ -130,7 +131,7 @@ export default function DashboardPage() {
                 {topSignals.slice(0, 10).map((sig, i) => (
                   <TableRow key={sig.ticker} className="border-slate-700/30 hover:bg-slate-800/30">
                     <TableCell className="font-mono-data text-slate-500 text-xs">{i + 1}</TableCell>
-                    <TableCell className="font-semibold">{sig.ticker}</TableCell>
+                    <TableCell><TickerLink ticker={sig.ticker} /></TableCell>
                     <TableCell>
                       <span className={cn("px-2 py-0.5 rounded text-xs font-medium", actionBadgeClass(sig.action))}>
                         {sig.action}

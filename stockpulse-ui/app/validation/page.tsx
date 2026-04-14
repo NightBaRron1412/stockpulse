@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { TickerLink } from "@/components/ticker-link";
 
 const PHASES = [
   { name: "PILOT", min: 0, label: "0-50 signals" },
@@ -243,7 +244,7 @@ export default function ValidationPage() {
                   return (
                     <TableRow key={i} className="border-slate-700/30">
                       <TableCell className="font-mono-data text-xs text-slate-400">{sig.signal_date}</TableCell>
-                      <TableCell className="font-semibold text-sm">{sig.ticker}</TableCell>
+                      <TableCell><TickerLink ticker={sig.ticker} /></TableCell>
                       <TableCell>
                         <span className={cn("px-2 py-0.5 rounded text-xs font-medium", actionBadgeClass(sig.action))}>
                           {sig.action}

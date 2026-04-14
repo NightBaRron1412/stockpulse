@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Recommendation, Action } from "@/lib/types";
+import { TickerLink } from "@/components/ticker-link";
 
 const ACTIONS: Action[] = ["BUY", "WATCHLIST", "HOLD", "CAUTION", "SELL"];
 
@@ -183,9 +184,9 @@ export default function WatchlistPage() {
                         setExpandedTicker(expandedTicker === rec.ticker ? null : rec.ticker)
                       }
                     >
-                      <TableCell className="font-semibold">{rec.ticker}</TableCell>
+                      <TableCell><TickerLink ticker={rec.ticker} /></TableCell>
                       <TableCell>
-                        {rec.action === "UNKNOWN" ? (
+                        {(rec.action as string) === "UNKNOWN" ? (
                           <a
                             href={`/signals?ticker=${rec.ticker}`}
                             onClick={(e) => e.stopPropagation()}

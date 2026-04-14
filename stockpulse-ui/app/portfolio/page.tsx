@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import type { Portfolio } from "@/lib/types";
 import { useState } from "react";
+import { TickerLink } from "@/components/ticker-link";
 
 export default function PortfolioPage() {
   const { data, loading, error } = usePolling<Portfolio>(api.portfolio, 30000);
@@ -127,7 +128,7 @@ export default function PortfolioPage() {
               return sortDir === "asc" ? av - bv : bv - av;
             }).map((pos) => (
               <TableRow key={pos.ticker} className="border-slate-700/30 hover:bg-slate-800/30">
-                <TableCell className="font-semibold">{pos.ticker}</TableCell>
+                <TableCell><TickerLink ticker={pos.ticker} /></TableCell>
                 <TableCell className="font-mono-data text-right text-xs">{pos.shares}</TableCell>
                 <TableCell className="font-mono-data text-right text-xs">
                   {pos.entry_price != null ? `$${pos.entry_price.toFixed(2)}` : "--"}
