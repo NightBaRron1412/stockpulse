@@ -7,7 +7,6 @@ import { actionBadgeClass, formatScore, cn } from "@/lib/utils";
 import { getSignalLabel, getSignalDescription } from "@/lib/signal-labels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Table,
   TableBody,
@@ -232,14 +231,9 @@ function SignalDetail({ rec }: { rec: Recommendation }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
         {signals.map(([name, sig]) => (
           <div key={name} className="flex items-center gap-2 text-xs">
-            <Tooltip>
-              <TooltipTrigger className="cursor-help text-slate-400 w-28 truncate">
-                {getSignalLabel(name)}
-              </TooltipTrigger>
-              <TooltipContent side="left" className="max-w-[300px] bg-slate-800 border-slate-700 text-slate-200">
-                <p className="text-xs">{getSignalDescription(name)}</p>
-              </TooltipContent>
-            </Tooltip>
+            <span className="cursor-help text-slate-400 w-28 truncate" title={getSignalDescription(name)}>
+              {getSignalLabel(name)}
+            </span>
             <div className="flex-1 h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
               <div
                 className={cn(

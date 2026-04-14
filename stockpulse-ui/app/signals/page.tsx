@@ -7,7 +7,6 @@ import { actionBadgeClass, formatScore, cn } from "@/lib/utils";
 import { getSignalLabel, getSignalDescription } from "@/lib/signal-labels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Recommendation } from "@/lib/types";
 
 function SignalsContent() {
@@ -120,14 +119,9 @@ function SignalsContent() {
                   const isPositive = weighted >= 0;
                   return (
                     <div key={name} className="flex items-center gap-3">
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-help text-xs text-slate-400 w-36 truncate text-right">
-                          {getSignalLabel(name)}
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[300px] bg-slate-800 border-slate-700 text-slate-200">
-                          <p className="text-xs">{getSignalDescription(name)}</p>
-                        </TooltipContent>
-                      </Tooltip>
+                      <span className="cursor-help text-xs text-slate-400 w-36 truncate text-right" title={getSignalDescription(name)}>
+                        {getSignalLabel(name)}
+                      </span>
                       <div className="flex-1 flex items-center h-5">
                         {/* center-aligned bar */}
                         <div className="w-full relative h-2 bg-slate-700/30 rounded-full">

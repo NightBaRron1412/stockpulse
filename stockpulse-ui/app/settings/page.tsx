@@ -8,7 +8,6 @@ import { getSignalLabel, getThresholdLabel, getThresholdDescription, getRiskLabe
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ScanStatus } from "@/lib/types";
 
 export default function SettingsPage() {
@@ -211,10 +210,7 @@ export default function SettingsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(currentThresholds).map(([name, val]) => (
             <div key={name} className="space-y-1">
-              <Tooltip>
-                <TooltipTrigger className="cursor-help text-xs text-slate-400">{getThresholdLabel(name)}</TooltipTrigger>
-                <TooltipContent className="max-w-[250px] bg-slate-800 border-slate-700"><p className="text-xs">{getThresholdDescription(name)}</p></TooltipContent>
-              </Tooltip>
+              <span className="cursor-help text-xs text-slate-400" title={getThresholdDescription(name)}>{getThresholdLabel(name)}</span>
               {editingThresholds ? (
                 <Input value={val} onChange={(e) => setEditedThresholds({...currentThresholds, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
               ) : (
@@ -241,10 +237,7 @@ export default function SettingsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(currentRisk).map(([name, val]) => (
             <div key={name} className="space-y-1">
-              <Tooltip>
-                <TooltipTrigger className="cursor-help text-xs text-slate-400">{getRiskLabel(name)}</TooltipTrigger>
-                <TooltipContent className="max-w-[250px] bg-slate-800 border-slate-700"><p className="text-xs">{getRiskDescription(name)}</p></TooltipContent>
-              </Tooltip>
+              <span className="cursor-help text-xs text-slate-400" title={getRiskDescription(name)}>{getRiskLabel(name)}</span>
               {editingRisk ? (
                 <Input value={val} onChange={(e) => setEditedRisk({...currentRisk, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
               ) : (
