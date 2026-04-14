@@ -47,6 +47,7 @@ export default function ReportsPage() {
   const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
 
   const handleSelect = useCallback(async (filename: string) => {
     setSelectedFilename(filename);
@@ -59,6 +60,31 @@ export default function ReportsPage() {
     } finally {
       setContentLoading(false);
     }
+  }, []);
+
+  const reportList = reports ?? [];
+  const typePriority: Record<string, number> = { morning: 0, intraday: 1, eod: 2, weekly: 3, other: 4 };
+
+  const { grouped, sortedDates } = useMemo(() => {
+    const g: Record<string, Report[]> = {};
+    for (const r of reportList) {
+      const key = r.date || "Unknown";
+      if (!g[key]) g[key] = [];
+      g[key].push(r);
+    }
+    for (const date of Object.keys(g)) {
+      g[date].sort((a, b) => (typePriority[a.type] ?? 4) - (typePriority[b.type] ?? 4));
+    }
+    return { grouped: g, sortedDates: Object.keys(g).sort((a, b) => b.localeCompare(a)) };
+  }, [reportList]);
+
+  const toggleDay = useCallback((date: string) => {
+    setCollapsedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
   }, []);
 
   if (loading) {
@@ -80,37 +106,6 @@ export default function ReportsPage() {
       </div>
     );
   }
-
-  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
-
-  const reportList = reports ?? [];
-
-  // Sort order within a day: morning first, then intraday by time, then eod, then weekly
-  const typePriority: Record<string, number> = { morning: 0, intraday: 1, eod: 2, weekly: 3, other: 4 };
-
-  // Group reports by date and sort within each group
-  const { grouped, sortedDates } = useMemo(() => {
-    const g: Record<string, Report[]> = {};
-    for (const r of reportList) {
-      const key = r.date || "Unknown";
-      if (!g[key]) g[key] = [];
-      g[key].push(r);
-    }
-    // Sort within each day
-    for (const date of Object.keys(g)) {
-      g[date].sort((a, b) => (typePriority[a.type] ?? 4) - (typePriority[b.type] ?? 4));
-    }
-    return { grouped: g, sortedDates: Object.keys(g).sort((a, b) => b.localeCompare(a)) };
-  }, [reportList]);
-
-  const toggleDay = (date: string) => {
-    setCollapsedDays(prev => {
-      const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
-  };
 
   return (
     <div className="space-y-6">
