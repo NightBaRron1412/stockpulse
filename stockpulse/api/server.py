@@ -401,7 +401,7 @@ def trigger_backtest(data: dict = {}):
             run_backtest(start_date=start_date, end_date=end_date)
             # Find the latest tearsheet
             logs_dir = PROJECT_ROOT / "logs"
-            tearsheets = sorted(logs_dir.glob("*_tearsheet.html"), reverse=True) if logs_dir.exists() else []
+            tearsheets = sorted(logs_dir.glob("*_tearsheet.html"), key=lambda f: f.stat().st_mtime, reverse=True) if logs_dir.exists() else []
             _backtest_status["result"] = {
                 "tearsheet": str(tearsheets[0]) if tearsheets else None,
                 "start_date": start_date,
@@ -425,7 +425,7 @@ def get_tearsheet():
     logs_dir = PROJECT_ROOT / "logs"
     if not logs_dir.exists():
         raise HTTPException(404, "No backtest results")
-    tearsheets = sorted(logs_dir.glob("*_tearsheet.html"), reverse=True)
+    tearsheets = sorted(logs_dir.glob("*_tearsheet.html"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not tearsheets:
         raise HTTPException(404, "No tearsheet found")
     from fastapi.responses import HTMLResponse
