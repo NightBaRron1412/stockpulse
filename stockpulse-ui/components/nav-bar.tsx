@@ -41,7 +41,7 @@ export function NavBar() {
     <nav className="sticky top-0 z-50 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-xl">
       <div className="max-w-[1400px] mx-auto px-6 flex items-center h-14 gap-1">
         <Link href="/" className="flex items-center gap-2 mr-8">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500" />
+          <img src="/logo.svg" alt="StockPulse" className="w-7 h-7" />
           <span className="font-semibold text-lg tracking-tight">StockPulse</span>
         </Link>
         {navItems.map((item) => {
