@@ -126,9 +126,9 @@ def _save_score_history(history: dict) -> None:
 def compute_score_acceleration(
     ticker: str, current_score: float, confirmation: dict
 ) -> float:
-    """Compute score acceleration bonus per expert.
+    """Compute score acceleration bonus .
 
-    Expert says: use as modifier (max +8 points), not core signal.
+    : use as modifier (max +8 points), not core signal.
     Requires score >= 35 AND breadth >= 2 AND persist >= 2.
     """
     history = _load_score_history()

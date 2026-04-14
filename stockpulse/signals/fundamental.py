@@ -23,7 +23,7 @@ def _clamp(value: float, lo: float = -100.0, hi: float = 100.0) -> float:
 
 def calc_earnings_signal(ticker: str) -> float:
     """Earnings proximity as a RISK flag, not bullish signal.
-    Per expert: earnings proximity = 0 as directional signal.
+    Per recommended: earnings proximity = 0 as directional signal.
     Returns negative score within blackout window to warn."""
     cfg = load_strategies().get("signals", {}).get("earnings", {})
     blackout_days = cfg.get("blackout_days", 3)
@@ -45,7 +45,7 @@ def calc_earnings_signal(ticker: str) -> float:
     return 0.0
 
 def calc_sec_filing_signal(ticker: str) -> float:
-    """SEC filing catalyst signal using expert's 8-K classification + insider scoring."""
+    """SEC filing catalyst signal using the 8-K classification + insider scoring."""
     cfg = load_strategies().get("signals", {}).get("sec_filing", {})
     lookback_days = cfg.get("lookback_days", 30)
     insider_buy_weight = cfg.get("insider_buy_weight", 3)

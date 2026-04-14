@@ -225,7 +225,7 @@ def compute_position_size(
     atr: float,
     confidence: int = 50,
 ) -> dict:
-    """Compute volatility-adjusted position size per expert.
+    """Compute volatility-adjusted position size .
 
     Base risk per trade = 0.75% of portfolio.
     Confidence can scale 0.75x to 1.25x.

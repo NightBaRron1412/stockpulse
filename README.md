@@ -6,7 +6,7 @@ Local, self-hosted stock research and alert system. Scans the S&P 500 daily, gen
 
 ## Features
 
-- **Daily S&P 500 scanning** with 11 expert-calibrated signals
+- **Daily S&P 500 scanning** with 11 professionally calibrated signals
 - **5-tier classification**: BUY / WATCHLIST / HOLD / CAUTION / SELL
 - **Confirmation buckets**: signals must agree across trend, participation, and catalyst categories
 - **Risk management**: sector caps, correlation clustering, drawdown breakers, earnings blackout

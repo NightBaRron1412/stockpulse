@@ -130,7 +130,7 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
             if trend_confirms and (rs_score >= 60 or breakout_score >= 15 or participation_confirms):
                 action = "WATCHLIST"
 
-    # ---- WATCHLIST -> BUY auto-upgrade per expert ----
+    # ---- WATCHLIST -> BUY auto-upgrade  ----
     if action == "WATCHLIST" and composite >= 50:
         vol_score = signals.get("volume", {}).get("score", 0)
         breakout_score = signals.get("breakout", {}).get("score", 0)

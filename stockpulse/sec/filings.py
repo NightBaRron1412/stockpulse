@@ -1,4 +1,4 @@
-"""SEC filing analysis — 8-K event classification per expert specs."""
+"""SEC filing analysis — 8-K event classification ."""
 
 import logging
 import os
@@ -10,7 +10,7 @@ from stockpulse.data.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
-# Expert's 8-K item importance map
+# 8-K item importance map
 _8K_IMPORTANCE = {
     "2.02": 1.00,  # Results of operations / financial condition
     "4.02": 1.00,  # Non-reliance on prior financials / restatement
@@ -149,7 +149,7 @@ def _parse_8k_items(description: str) -> list[str]:
 
 
 def score_filings(ticker: str, lookback_days: int = 30) -> float:
-    """Score filings with expert caps: unparsed SEC capped at +25,
+    """Score filings with caps: unparsed SEC capped at +25,
     half-life decay, log1p diminishing returns for filing count."""
     cfg_sec = load_strategies().get("signals", {}).get("sec_filing", {})
     raw_cap = cfg_sec.get("raw_cap_without_direction", 25)

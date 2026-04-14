@@ -1,4 +1,4 @@
-"""Relative Strength vs SPY and sector -- expert-specified excess return percentile ranks."""
+"""Relative Strength vs SPY and sector --  excess return percentile ranks."""
 
 import logging
 import math
@@ -66,7 +66,7 @@ def calc_relative_strength(
     df: pd.DataFrame,
     universe_excess_returns: dict | None = None,
 ) -> float:
-    """Compute relative strength score using expert's formula.
+    """Compute relative strength score using the formula.
 
     Args:
         ticker: Stock ticker
@@ -129,7 +129,7 @@ def calc_relative_strength(
         p2 = _excess_to_percentile(ex60_mkt, scale=0.15)
         p3 = _excess_to_percentile(ex20_sector, scale=0.08)
 
-    # Expert's formula
+    # RS formula
     rs_score = 100 * (
         0.40 * (2 * p1 - 1) +
         0.35 * (2 * p2 - 1) +

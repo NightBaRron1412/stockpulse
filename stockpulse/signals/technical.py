@@ -14,7 +14,7 @@ def _get_signal_config(name: str) -> dict:
     return strat.get("signals", {}).get(name, {})
 
 def calc_rsi_signal(df: pd.DataFrame) -> float:
-    """RSI signal with expert-calibrated granular zones.
+    """RSI signal with professionally calibrated granular zones.
     In uptrends: 70-75 is only -5, not -15. RSI 50-70 is neutral.
     In downtrends: 35-55 is neutral, 55-65 is mild -5."""
     cfg = _get_signal_config("rsi")
@@ -135,7 +135,7 @@ def calc_ma_signal(df: pd.DataFrame) -> float:
     return _clamp(combined)
 
 def calc_volume_signal(df: pd.DataFrame) -> float:
-    """Volume signal using RVOL with soft positive band per expert.
+    """Volume signal using RVOL with soft positive band .
     0.8-1.0 RVOL gets small positive if price closes well and trend intact."""
     cfg = _get_signal_config("volume")
     lookback = cfg.get("lookback", 20)

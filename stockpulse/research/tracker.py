@@ -1,4 +1,4 @@
-"""Signal performance tracker with statistical validation per expert specs.
+"""Signal performance tracker with statistical validation .
 
 Primary endpoint: BUY signals, 10-trading-day excess return vs SPY.
 Secondary: 5d, 20d horizons. WATCHLIST tracked separately.
@@ -205,7 +205,7 @@ def _compute_stats(signals: list) -> dict:
 
 
 def _run_validation_tests(signals: list) -> dict:
-    """Run the expert's statistical test battery.
+    """Run the the statistical test battery.
 
     Only runs when there are enough resolved signals.
     Primary: BUY, 10d, excess vs SPY.
@@ -413,7 +413,7 @@ def get_performance_report() -> str:
     if status == "working":
         lines.append("**Verdict: MODEL IS WORKING**")
     elif status == "needs_calibration":
-        lines.append("**Verdict: NEEDS CALIBRATION** -- not meeting expert thresholds")
+        lines.append("**Verdict: NEEDS CALIBRATION** -- not meeting target thresholds")
         verdict = validation.get("verdict", {})
         for k, v in verdict.items():
             lines.append(f"  - {k}: {'PASS' if v else 'FAIL'}")

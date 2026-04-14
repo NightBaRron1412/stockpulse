@@ -1,4 +1,4 @@
-"""Insider transaction scoring — expert-specified role/size/cluster model."""
+"""Insider transaction scoring —  role/size/cluster model."""
 
 import logging
 import os
@@ -9,7 +9,7 @@ from stockpulse.config.settings import get_config
 
 logger = logging.getLogger(__name__)
 
-# Expert's role weights
+# Role weights
 _ROLE_WEIGHTS = {
     "CEO": 1.00, "CFO": 1.00, "Chief Executive": 1.00, "Chief Financial": 1.00,
     "COO": 0.80, "President": 0.80, "Chair": 0.80, "Chairman": 0.80,
@@ -95,7 +95,7 @@ def get_insider_transactions(ticker: str, lookback_days: int = 30) -> list[dict]
 
 
 def score_insider_activity(ticker: str, lookback_days: int = 30) -> float:
-    """Score insider activity using expert's model.
+    """Score insider activity using the model.
 
     Only scores buys (Form 4 with transaction code P).
     Uses role weight, cluster multiplier, and recency decay.
@@ -136,7 +136,7 @@ def score_insider_activity(ticker: str, lookback_days: int = 30) -> float:
     else:
         cluster_mult = 1.00
 
-    # Use log1p diminishing returns for filing count (expert recommendation)
+    # Use log1p diminishing returns for filing count 
     # Don't let 30 routine Form 4s score the same as 3 meaningful insider buys
     import math
     avg_score = sum(buy_scores) / len(buy_scores) if buy_scores else 0

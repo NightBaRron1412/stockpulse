@@ -63,7 +63,7 @@ signals:
       form4_purchase: 10
     diminishing_returns: log1p
   news_sentiment:
-    weight: 0.08           # LLM event classification per expert (5-10% range)
+    weight: 0.08           # LLM event classification (5-10% range)
   relative_strength:
     benchmark: "SPY"
     periods: [20, 60]

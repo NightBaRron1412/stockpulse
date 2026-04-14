@@ -1,4 +1,4 @@
-"""Post-Earnings Drift (PEAD) -- expert-specified surprise + tape confirmation."""
+"""Post-Earnings Drift (PEAD) --  surprise + tape confirmation."""
 
 import logging
 import math
@@ -149,7 +149,7 @@ def calc_pead_score(ticker: str) -> float:
         except Exception:
             logger.debug("PEAD tape analysis failed for %s", ticker)
 
-        # Expert's PEAD formula
+        # PEAD formula
         pead_score = (
             0.45 * eps_z
             + 0.20 * rev_z

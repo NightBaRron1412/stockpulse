@@ -3,7 +3,7 @@ import pandas as pd
 import pandas_ta as ta
 
 def compute_invalidation(ticker: str, action: str, df: pd.DataFrame) -> str:
-    """Generate invalidation conditions with ATR-based levels per expert."""
+    """Generate invalidation conditions with ATR-based levels ."""
     if df.empty:
         return "Insufficient data for invalidation levels"
 
