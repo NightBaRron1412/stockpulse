@@ -20,7 +20,9 @@ export default function SettingsPage() {
   const [btStartDate, setBtStartDate] = useState("2025-07-01");
   const [btEndDate, setBtEndDate] = useState("2026-01-01");
   const [backtesting, setBacktesting] = useState(false);
-  const [btStatus, setBtStatus] = useState<any>(null);
+  const { data: btStatusFromApi } = usePolling<any>(api.backtestStatus, 10000);
+  const [btStatusLocal, setBtStatusLocal] = useState<any>(null);
+  const btStatus = btStatusLocal ?? btStatusFromApi;
   const [saving, setSaving] = useState(false);
   const [editedThresholds, setEditedThresholds] = useState<Record<string, string> | null>(null);
   const [editedRisk, setEditedRisk] = useState<Record<string, string> | null>(null);
@@ -309,13 +311,13 @@ export default function SettingsPage() {
             <Button
               onClick={async () => {
                 setBacktesting(true);
-                setBtStatus({ running: true, progress: "Starting..." });
+                setBtStatusLocal({ running: true, progress: "Starting..." });
                 try {
                   await api.triggerBacktest(btStartDate, btEndDate);
                   // Poll for completion
                   const poll = setInterval(async () => {
                     const s = await api.backtestStatus();
-                    setBtStatus(s);
+                    setBtStatusLocal(s);
                     if (!s.running) {
                       clearInterval(poll);
                       setBacktesting(false);
@@ -323,7 +325,7 @@ export default function SettingsPage() {
                   }, 3000);
                 } catch {
                   setBacktesting(false);
-                  setBtStatus({ running: false, error: "Failed to start backtest" });
+                  setBtStatusLocal({ running: false, error: "Failed to start backtest" });
                 }
               }}
               disabled={backtesting}
