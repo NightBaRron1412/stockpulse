@@ -387,16 +387,49 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {Object.entries(currentSchedule).map(([name, val]) => (
-                <div key={name} className="space-y-1">
-                  <p className="cursor-help text-xs text-slate-400" title={getScheduleDescription(name)}>{getScheduleLabel(name)}</p>
-                  {editingSchedule ? (
-                    <Input value={val} onChange={(e) => setEditedSchedule({...currentSchedule, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24" />
-                  ) : (
-                    <p className="font-mono-data text-slate-200 text-sm">{val}</p>
-                  )}
-                </div>
-              ))}
+              {Object.entries(currentSchedule).map(([name, val]) => {
+                const isTime = name === "morning_scan" || name === "eod_recap";
+                const isTimezone = name === "timezone";
+                return (
+                  <div key={name} className="space-y-1">
+                    <p className="cursor-help text-xs text-slate-400" title={getScheduleDescription(name)}>{getScheduleLabel(name)}</p>
+                    {editingSchedule ? (
+                      isTime ? (
+                        <Input
+                          type="time"
+                          value={val}
+                          onChange={(e) => setEditedSchedule({...currentSchedule, [name]: e.target.value})}
+                          className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-32"
+                        />
+                      ) : isTimezone ? (
+                        <select
+                          value={val}
+                          onChange={(e) => setEditedSchedule({...currentSchedule, [name]: e.target.value})}
+                          className="bg-slate-800/50 border border-slate-700/50 h-8 text-sm font-mono-data rounded-md px-2 text-slate-200 w-40"
+                        >
+                          <option value="US/Eastern">US/Eastern</option>
+                          <option value="US/Central">US/Central</option>
+                          <option value="US/Mountain">US/Mountain</option>
+                          <option value="US/Pacific">US/Pacific</option>
+                          <option value="America/New_York">America/New_York</option>
+                          <option value="America/Chicago">America/Chicago</option>
+                          <option value="America/Los_Angeles">America/Los_Angeles</option>
+                          <option value="UTC">UTC</option>
+                        </select>
+                      ) : (
+                        <Input
+                          type="number"
+                          value={val}
+                          onChange={(e) => setEditedSchedule({...currentSchedule, [name]: e.target.value})}
+                          className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24"
+                        />
+                      )
+                    ) : (
+                      <p className="font-mono-data text-slate-200 text-sm">{val}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
