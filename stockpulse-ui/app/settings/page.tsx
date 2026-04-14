@@ -21,6 +21,8 @@ export default function SettingsPage() {
   const [editedThresholds, setEditedThresholds] = useState<Record<string, string> | null>(null);
   const [editedRisk, setEditedRisk] = useState<Record<string, string> | null>(null);
   const [editingThresholds, setEditingThresholds] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [editedSchedule, setEditedSchedule] = useState<Record<string, string> | null>(null);
   const [editingRisk, setEditingRisk] = useState(false);
 
   const handleAdd = useCallback(async () => {
@@ -56,9 +58,17 @@ export default function SettingsPage() {
           update.risk[k] = Number(v);
         }
       }
+      if (editedSchedule) {
+        update.scheduling = {};
+        for (const [k, v] of Object.entries(editedSchedule)) {
+          const num = Number(v);
+          update.scheduling[k] = isNaN(num) ? v : num;
+        }
+      }
       await api.updateConfig(update);
       setEditedThresholds(null);
       setEditedRisk(null);
+      setEditedSchedule(null);
       refresh();
     } finally { setSaving(false); }
   }, [editedThresholds, editedRisk, refresh]);
@@ -269,21 +279,38 @@ export default function SettingsPage() {
       </div>
 
       {/* Schedule */}
-      {Object.keys(scheduling).length > 0 && (
-        <div className="glass-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-300">Schedule</h2>
+      {Object.keys(scheduling).length > 0 && (() => {
+        const currentSchedule = editedSchedule ?? Object.fromEntries(
+          Object.entries(scheduling).map(([k, v]) => [k, String(v)])
+        );
+        return (
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-300">Schedule</h2>
+              {!editingSchedule ? (
+                <Button variant="outline" size="sm" onClick={() => { setEditingSchedule(true); setEditedSchedule({...currentSchedule}); }} className="h-7 text-xs border-slate-700">Edit</Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => { setEditingSchedule(false); setEditedSchedule(null); }} className="h-7 text-xs border-slate-700">Cancel</Button>
+                  <Button size="sm" onClick={() => { handleSaveConfig(); setEditingSchedule(false); }} disabled={saving} className="h-7 text-xs">Save</Button>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {Object.entries(currentSchedule).map(([name, val]) => (
+                <div key={name} className="space-y-1">
+                  <p className="cursor-help text-xs text-slate-400" title={getScheduleDescription(name)}>{getScheduleLabel(name)}</p>
+                  {editingSchedule ? (
+                    <Input value={val} onChange={(e) => setEditedSchedule({...currentSchedule, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24" />
+                  ) : (
+                    <p className="font-mono-data text-slate-200 text-sm">{val}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Object.entries(scheduling).map(([name, val]: [string, any]) => (
-              <div key={name} className="space-y-1">
-                <p className="cursor-help text-xs text-slate-400" title={getScheduleDescription(name)}>{getScheduleLabel(name)}</p>
-                <p className="font-mono-data text-slate-200 text-sm">{String(val)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

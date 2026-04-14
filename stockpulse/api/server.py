@@ -70,8 +70,8 @@ def _parse_activity_log() -> list[dict]:
                     pass
             elif "Morning scan complete:" in line:
                 try:
-                    msg = line.split("Morning scan complete: ")[1]
-                    events.append({"timestamp": ts, "type": "scan", "message": f"Morning scan: {msg[:100]}"})
+                    msg = line.split("Morning scan complete: ")[1].split(". Report:")[0]
+                    events.append({"timestamp": ts, "type": "scan", "message": f"Morning scan: {msg}"})
                 except Exception:
                     pass
             elif "changes detected" in line and "no " not in line:
@@ -442,6 +442,10 @@ def update_config(data: dict):
         for key, val in data["risk"].items():
             if key in strat.get("risk", {}):
                 strat["risk"][key] = val
+    if "scheduling" in data:
+        for key, val in data["scheduling"].items():
+            if key in strat.get("scheduling", {}):
+                strat["scheduling"][key] = val
     # Write back
     strat_path = PROJECT_ROOT / "stockpulse" / "config" / "strategies.yaml"
     with open(strat_path, "w") as f:
