@@ -1,8 +1,6 @@
 """Fundamental/catalyst signal generators. Each function returns a score from -100 to +100."""
 import logging
 from stockpulse.data.provider import get_earnings_dates, get_news
-from stockpulse.sec.filings import get_recent_filings
-from stockpulse.sec.insider import get_insider_transactions
 from stockpulse.config.settings import load_strategies
 
 logger = logging.getLogger(__name__)
@@ -47,20 +45,23 @@ def calc_earnings_signal(ticker: str) -> float:
     return 0.0
 
 def calc_sec_filing_signal(ticker: str) -> float:
+    """SEC filing catalyst signal using expert's 8-K classification + insider scoring."""
     cfg = load_strategies().get("signals", {}).get("sec_filing", {})
     lookback_days = cfg.get("lookback_days", 30)
-    score = 0.0
-    filings = get_recent_filings(ticker, lookback_days)
-    for filing in filings:
-        form = filing.get("form", "")
-        if form == "8-K":
-            score += 15
-        elif form in ("10-K", "10-Q"):
-            score += 5
-    insiders = get_insider_transactions(ticker, lookback_days)
-    if insiders:
-        score += min(len(insiders) * 5, 20)
-    return _clamp(score)
+    insider_buy_weight = cfg.get("insider_buy_weight", 3)
+
+    # Filing importance score (8-K event classification)
+    from stockpulse.sec.filings import score_filings
+    filing_score = score_filings(ticker, lookback_days)
+
+    # Insider buy score (role-weighted, cluster-multiplied)
+    from stockpulse.sec.insider import score_insider_activity
+    insider_score = score_insider_activity(ticker, lookback_days)
+
+    # Combine: filing events + insider buying (insider weighted per config)
+    combined = (filing_score + insider_score * (insider_buy_weight / 3.0)) / 2.0
+
+    return _clamp(combined)
 
 def calc_news_sentiment_signal(ticker: str) -> float:
     try:
