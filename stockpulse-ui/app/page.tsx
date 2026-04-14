@@ -149,7 +149,7 @@ export default function DashboardPage() {
                               sig.composite_score >= 0 ? "score-bar-positive" : "score-bar-negative"
                             )}
                             style={{
-                              width: `${Math.min(Math.abs(sig.composite_score) * 10, 100)}%`,
+                              width: `${Math.min(Math.abs(sig.composite_score), 100)}%`,
                             }}
                           />
                         </div>

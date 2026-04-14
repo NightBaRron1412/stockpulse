@@ -52,9 +52,33 @@ export default function WatchlistPage() {
     }
   }, [refresh]);
 
+  const [sortKey, setSortKey] = useState<string>("composite_score");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
   const items = (data ?? [])
     .filter((r) => filter === "ALL" || r.action === filter)
-    .filter((r) => !search || r.ticker.toUpperCase().includes(search.toUpperCase()));
+    .filter((r) => !search || r.ticker.toUpperCase().includes(search.toUpperCase()))
+    .sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortKey) {
+        case "ticker": av = a.ticker; bv = b.ticker; break;
+        case "action": av = a.action; bv = b.action; break;
+        case "composite_score": av = a.composite_score ?? 0; bv = b.composite_score ?? 0; break;
+        case "confidence": av = a.confidence ?? 0; bv = b.confidence ?? 0; break;
+        default: av = a.composite_score ?? 0; bv = b.composite_score ?? 0;
+      }
+      if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
 
   if (loading) {
     return (
@@ -142,10 +166,10 @@ export default function WatchlistPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-slate-700/50 hover:bg-transparent">
-                  <TableHead className="text-slate-400 text-xs">Ticker</TableHead>
-                  <TableHead className="text-slate-400 text-xs">Action</TableHead>
-                  <TableHead className="text-slate-400 text-xs">Score</TableHead>
-                  <TableHead className="text-slate-400 text-xs">Confidence</TableHead>
+                  <SortableHead label="Ticker" sortKey="ticker" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Action" sortKey="action" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Score" sortKey="composite_score" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Confidence" sortKey="confidence" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
                   <TableHead className="text-slate-400 text-xs">Thesis</TableHead>
                   <TableHead className="text-slate-400 text-xs">Source</TableHead>
                   <TableHead className="text-slate-400 text-xs w-10"></TableHead>
@@ -178,7 +202,7 @@ export default function WatchlistPage() {
                                 rec.composite_score >= 0 ? "score-bar-positive" : "score-bar-negative"
                               )}
                               style={{
-                                width: `${Math.min(Math.abs(rec.composite_score) * 10, 100)}%`,
+                                width: `${Math.min(Math.abs(rec.composite_score), 100)}%`,
                               }}
                             />
                           </div>
@@ -250,5 +274,21 @@ function SignalDetail({ rec }: { rec: Recommendation }) {
         <p className="text-xs text-red-400/80 mt-2">Invalidation: {rec.invalidation}</p>
       )}
     </div>
+  );
+}
+
+function SortableHead({ label, sortKey, currentKey, dir, onSort }: {
+  label: string; sortKey: string; currentKey: string; dir: "asc" | "desc"; onSort: (key: string) => void;
+}) {
+  const active = currentKey === sortKey;
+  return (
+    <TableHead className="text-slate-400 text-xs">
+      <button onClick={() => onSort(sortKey)} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
+        {label}
+        <span className={cn("text-[10px]", active ? "text-blue-400" : "text-slate-600")}>
+          {active ? (dir === "desc" ? "▼" : "▲") : "⇅"}
+        </span>
+      </button>
+    </TableHead>
   );
 }
