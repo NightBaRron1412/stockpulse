@@ -30,13 +30,19 @@ _HORIZONS = {"5d": 7, "10d": 14, "20d": 28}  # calendar days approximation
 
 
 def _load_tracker() -> dict:
+    default = {"signals": [], "stats": {}, "validation": {}}
     if _TRACKER_FILE.exists():
         try:
             with open(_TRACKER_FILE) as f:
-                return json.load(f)
+                data = json.load(f)
+            # Ensure required keys exist (handles files reset by make clean)
+            for key in default:
+                if key not in data:
+                    data[key] = default[key]
+            return data
         except Exception:
             pass
-    return {"signals": [], "stats": {}, "validation": {}}
+    return default
 
 
 def _save_tracker(data: dict) -> None:
