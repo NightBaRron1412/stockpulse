@@ -113,8 +113,60 @@ def _update_discovered(ranked: list[dict]) -> None:
                     })
 
             logger.info("Auto-discovered %d new tickers: %s", len(new_discoveries), new_discoveries)
+
+        # Auto-remove discovered tickers that have been HOLD for 5+ consecutive days
+        _cleanup_discovered(ranked, wl, user_tickers)
+
     except Exception:
         logger.exception("Failed to update discovered watchlist")
+
+
+def _cleanup_discovered(ranked: list[dict], wl: dict, user_tickers: set) -> None:
+    """Remove discovered tickers that dropped below WATCHLIST for 5 consecutive scans."""
+    import json
+    from pathlib import Path
+
+    state_file = Path(__file__).resolve().parent.parent.parent / "outputs" / ".discovery_state.json"
+
+    # Load hold-day counters
+    try:
+        with open(state_file) as f:
+            state = json.load(f)
+    except Exception:
+        state = {}
+
+    discovered = set(wl.get("discovered", []))
+    rec_map = {r["ticker"]: r for r in ranked}
+    removed = []
+
+    for ticker in list(discovered):
+        if ticker in user_tickers:
+            continue  # never remove user tickers
+
+        rec = rec_map.get(ticker)
+        if rec and rec["action"] in ("BUY", "WATCHLIST"):
+            # Still active — reset counter
+            state[ticker] = 0
+        else:
+            # Below threshold — increment counter
+            state[ticker] = state.get(ticker, 0) + 1
+
+        if state.get(ticker, 0) >= 5:
+            removed.append(ticker)
+            discovered.discard(ticker)
+            state.pop(ticker, None)
+
+    if removed:
+        wl["discovered"] = sorted(discovered)
+        # Remove from priority too
+        wl["priority"] = [p for p in wl.get("priority", []) if p.get("ticker") not in removed]
+        save_watchlists(wl)
+        logger.info("Auto-removed %d stale discovered tickers: %s", len(removed), removed)
+
+    # Save state
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(state_file, "w") as f:
+        json.dump(state, f)
 
 
 def _track_signals(ranked: list[dict]) -> None:
