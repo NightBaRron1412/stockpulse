@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { getSignalLabel, getSignalDescription, getThresholdLabel, getThresholdDescription, getRiskLabel, getRiskDescription } from "@/lib/signal-labels";
+import { getSignalLabel, getSignalDescription, getThresholdLabel, getThresholdDescription, getRiskLabel, getRiskDescription, getScheduleLabel, getScheduleDescription } from "@/lib/signal-labels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -268,18 +268,17 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Schedule (read-only) */}
+      {/* Schedule */}
       {Object.keys(scheduling).length > 0 && (
         <div className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-300">Schedule</h2>
-            <span className="text-[10px] text-slate-600 uppercase">Read-only</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {Object.entries(scheduling).map(([name, val]: [string, any]) => (
-              <div key={name} className="flex justify-between text-xs">
-                <span className="text-slate-400">{name.replace(/_/g, " ")}</span>
-                <span className="font-mono-data text-slate-300">{String(val)}</span>
+              <div key={name} className="space-y-1">
+                <p className="cursor-help text-xs text-slate-400" title={getScheduleDescription(name)}>{getScheduleLabel(name)}</p>
+                <p className="font-mono-data text-slate-200 text-sm">{String(val)}</p>
               </div>
             ))}
           </div>

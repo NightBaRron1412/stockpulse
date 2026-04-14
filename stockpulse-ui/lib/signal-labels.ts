@@ -89,3 +89,18 @@ export function getRiskLabel(key: string): string {
 export function getRiskDescription(key: string): string {
   return RISK_LABELS[key]?.description ?? "";
 }
+
+export const SCHEDULE_LABELS: Record<string, { name: string; description: string }> = {
+  morning_scan: { name: "Morning Scan", description: "Full S&P 500 scan time (ET)" },
+  intraday_interval_minutes: { name: "Intraday Interval", description: "Minutes between watchlist checks" },
+  eod_recap: { name: "End of Day Recap", description: "EOD report generation time (ET)" },
+  sec_scan_interval_hours: { name: "SEC Scan Interval", description: "Hours between SEC filing checks" },
+  timezone: { name: "Timezone", description: "All schedules use this timezone" },
+};
+
+export function getScheduleLabel(key: string): string {
+  return SCHEDULE_LABELS[key]?.name ?? key.replace(/_/g, " ");
+}
+export function getScheduleDescription(key: string): string {
+  return SCHEDULE_LABELS[key]?.description ?? "";
+}

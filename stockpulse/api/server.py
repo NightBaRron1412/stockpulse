@@ -74,13 +74,12 @@ def _parse_activity_log() -> list[dict]:
                     events.append({"timestamp": ts, "type": "scan", "message": f"Morning scan: {msg[:100]}"})
                 except Exception:
                     pass
-            elif "changes detected" in line:
+            elif "changes detected" in line and "no " not in line:
                 try:
                     count = line.split("Intraday: ")[1].split(" ")[0]
                     events.append({"timestamp": ts, "type": "alert", "message": f"Intraday: {count} signal changes detected"})
                 except Exception:
                     events.append({"timestamp": ts, "type": "alert", "message": "Intraday changes detected"})
-            # Skip "no changes" — not interesting for the activity feed
             elif "Auto-discovered" in line:
                 try:
                     msg = line.split("Auto-discovered ")[1]
