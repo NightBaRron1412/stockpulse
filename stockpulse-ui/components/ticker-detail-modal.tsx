@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { cn, actionBadgeClass, formatScore } from "@/lib/utils";
 import { getSignalLabel, getSignalDescription } from "@/lib/signal-labels";
@@ -64,12 +64,7 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
         <div className="flex-1 flex overflow-hidden">
           {/* TradingView Chart (left 60%) */}
           <div className="flex-[3] border-r border-slate-700/50">
-            <iframe
-              key={ticker}
-              src={`https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${ticker}&interval=D&hidesidetoolbar=0&symboledit=1&saveimage=0&toolbarbg=0f172a&studies=MAExp%4025&studies=MASimple%4050&studies=MASimple%40200&theme=dark&style=1&timezone=America%2FNew_York&studies_overrides=%7B%7D&overrides=%7B%22paneProperties.background%22%3A%22%230f172a%22%2C%22paneProperties.backgroundType%22%3A%22solid%22%7D&enabled_features=[]&disabled_features=[]&locale=en&utm_source=stockpulse&utm_medium=widget&utm_campaign=chart`}
-              className="w-full h-full border-0"
-              allowFullScreen
-            />
+            <TradingViewChart ticker={ticker} />
           </div>
 
           {/* Signal Analysis (right 40%) */}
@@ -197,4 +192,46 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
       </div>
     </>
   );
+}
+
+function TradingViewChart({ ticker }: { ticker: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    // Clear previous widget
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    const widgetDiv = document.createElement("div");
+    widgetDiv.className = "tradingview-widget-container__widget";
+    widgetDiv.style.width = "100%";
+    widgetDiv.style.height = "100%";
+    container.appendChild(widgetDiv);
+
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.type = "text/javascript";
+    script.async = true;
+    script.textContent = JSON.stringify({
+      autosize: true,
+      symbol: ticker,
+      interval: "D",
+      timezone: "America/New_York",
+      theme: "dark",
+      style: "3",
+      locale: "en",
+      backgroundColor: "rgba(15, 23, 42, 1)",
+      gridColor: "rgba(30, 41, 59, 0.5)",
+      hide_top_toolbar: false,
+      hide_legend: false,
+      save_image: false,
+      calendar: false,
+      studies: ["MAExp@tv-basicstudies|20", "MASimple@tv-basicstudies|50", "MASimple@tv-basicstudies|200"],
+      support_host: "https://www.tradingview.com",
+    });
+    container.appendChild(script);
+  }, [ticker]);
+
+  return <div className="tradingview-widget-container w-full h-full" ref={containerRef} />;
 }
