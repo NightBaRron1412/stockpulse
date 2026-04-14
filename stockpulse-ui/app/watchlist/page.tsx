@@ -291,7 +291,7 @@ function SortableHead({ label, sortKey, currentKey, dir, onSort }: {
   const active = currentKey === sortKey;
   return (
     <TableHead className="text-slate-400 text-xs">
-      <button onClick={() => onSort(sortKey)} className="flex items-center gap-1 hover:text-slate-200 transition-colors">
+      <button onClick={() => onSort(sortKey)} className="flex items-center gap-1 hover:text-slate-200 transition-colors cursor-pointer">
         {label}
         <span className={cn("text-[10px]", active ? "text-blue-400" : "text-slate-600")}>
           {active ? (dir === "desc" ? "▼" : "▲") : "⇅"}

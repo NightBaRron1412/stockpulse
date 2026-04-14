@@ -141,7 +141,7 @@ export default function PortfolioPage() {
                 <TableCell className={cn("font-mono-data text-right text-xs", pos.pnl >= 0 ? "text-green-400" : "text-red-400")}>
                   {formatPnl(pos.pnl)}
                 </TableCell>
-                <TableCell>
+                <TableCell className="pl-6">
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[11px] font-medium",
                     pos.pnl >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
@@ -188,7 +188,7 @@ function SortHead({ label, sortKey, current, dir, onSort, align = "left" }: {
   const active = current === sortKey;
   return (
     <TableHead className={cn("text-slate-400 text-xs", align === "right" && "text-right")}>
-      <button onClick={() => onSort(sortKey)} className={cn("flex items-center gap-1 hover:text-slate-200 transition-colors", align === "right" && "ml-auto")}>
+      <button onClick={() => onSort(sortKey)} className={cn("flex items-center gap-1 hover:text-slate-200 transition-colors cursor-pointer", align === "right" && "ml-auto")}>
         {label}
         <span className={cn("text-[10px]", active ? "text-blue-400" : "text-slate-600")}>
           {active ? (dir === "desc" ? "▼" : "▲") : "⇅"}
