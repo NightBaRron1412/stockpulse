@@ -138,7 +138,7 @@ export default function WatchlistPage() {
               : "No tickers match your filter"}
           </div>
         ) : (
-          <ScrollArea className="max-h-[600px]">
+          <div>
             <Table>
               <TableHeader>
                 <TableRow className="border-slate-700/50 hover:bg-transparent">
@@ -215,7 +215,7 @@ export default function WatchlistPage() {
                 ))}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         )}
       </div>
     </div>
