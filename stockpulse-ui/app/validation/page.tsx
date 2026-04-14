@@ -217,7 +217,7 @@ export default function ValidationPage() {
 
       {/* Tracked Signals Table */}
       {signals.length > 0 && (
-        <div className="glass-card p-0 overflow-hidden">
+        <div className="rounded-xl border border-slate-700/50 bg-slate-900/60 px-4">
           <div className="px-5 py-4 border-b border-slate-700/50">
             <h2 className="text-sm font-semibold text-slate-300">Tracked Signals ({signals.length})</h2>
           </div>

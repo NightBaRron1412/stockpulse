@@ -114,11 +114,12 @@ def _parse_activity_log() -> list[dict]:
 
 
 def _get_scan_status() -> dict:
-    """Check if a scan is currently running."""
+    """Check if a scan or job is currently running."""
     log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
     last_completed = "Never"
     running = False
     progress = ""
+    current_job = ""
     if log_path.exists():
         try:
             lines = log_path.read_text().strip().split("\n")
@@ -127,17 +128,36 @@ def _get_scan_status() -> dict:
                     last_completed = line[:19]
                 if "MORNING SCAN START" in line and last_completed == "Never":
                     running = True
+                    current_job = "Morning Scan"
                 if "Scanned " in line and "/" in line and running:
                     try:
                         progress = line.split("Scanned ")[1].split(" ")[0]
                     except Exception:
                         pass
                     break
+            # Check if an intraday/portfolio/SEC job is actively running (started but not completed in last few lines)
+            if not running:
+                recent = lines[-5:] if len(lines) >= 5 else lines
+                for line in reversed(recent):
+                    if "--- Intraday check ---" in line:
+                        current_job = "Intraday Check"
+                        running = True
+                        break
+                    elif "--- Portfolio check ---" in line:
+                        current_job = "Portfolio Check"
+                        running = True
+                        break
+                    elif "--- SEC filing scan ---" in line:
+                        current_job = "SEC Scan"
+                        running = True
+                        break
+                    elif "executed successfully" in line or "no changes" in line or "complete" in line:
+                        break  # last job finished, idle
         except Exception:
             pass
     return {
         "running": running,
-        "progress": progress,
+        "progress": progress or current_job,
         "last_completed": last_completed,
         "next_scheduled": "09:35 ET",
     }
@@ -226,10 +246,33 @@ def get_portfolio():
 def analyze_ticker(ticker: str):
     from stockpulse.data.provider import get_price_history
     from stockpulse.research.recommendation import generate_recommendation
-    df = get_price_history(ticker.upper(), period="1y")
+    t = ticker.upper()
+    df = get_price_history(t, period="1y")
     if df.empty:
         raise HTTPException(404, f"No data for {ticker}")
-    return generate_recommendation(ticker.upper(), df)
+    result = generate_recommendation(t, df)
+
+    # Save result into latest scan JSON so watchlist shows it
+    try:
+        json_dir = PROJECT_ROOT / "outputs" / "json"
+        if json_dir.exists():
+            files = sorted(json_dir.glob("*.json"), reverse=True)
+            for f in files:
+                data = _read_json(f)
+                if isinstance(data, dict) and "recommendations" in data:
+                    # Remove old entry for this ticker if exists
+                    recs = [r for r in data["recommendations"] if r.get("ticker") != t]
+                    # Strip non-serializable fields
+                    clean = {k: v for k, v in result.items() if k != "signals" or isinstance(v, dict)}
+                    recs.append(clean)
+                    data["recommendations"] = recs
+                    with open(f, "w") as fh:
+                        json.dump(data, fh, indent=2, default=str)
+                    break
+    except Exception:
+        pass  # Don't fail the response if save fails
+
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -255,8 +298,22 @@ def list_reports():
         name = f.stem
         parts = name.split("-")
         date_str = "-".join(parts[:3]) if len(parts) >= 3 else name
-        rtype = parts[3] if len(parts) > 3 else "unknown"
-        result.append({"filename": f.name, "date": date_str, "type": rtype, "title": f.name})
+        # Detect report type from filename
+        name_lower = name.lower()
+        if "morning" in name_lower:
+            rtype, title = "morning", "Morning Scan"
+        elif "eod" in name_lower:
+            rtype, title = "eod", "End of Day Recap"
+        elif "intraday" in name_lower:
+            # Extract time from "2026-04-14-1404-intraday"
+            time_part = parts[3] if len(parts) > 4 else ""
+            time_str = f"{time_part[:2]}:{time_part[2:]}" if len(time_part) == 4 else time_part
+            rtype, title = "intraday", f"Intraday Update ({time_str})"
+        elif "weekly" in name_lower:
+            rtype, title = "weekly", "Weekly Digest"
+        else:
+            rtype, title = "other", name
+        result.append({"filename": f.name, "date": date_str, "type": rtype, "title": title})
     return result
 
 
