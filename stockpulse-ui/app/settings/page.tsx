@@ -363,7 +363,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <p className="mt-3 text-[11px] text-slate-600">
+        <p className="mt-3 text-[11px] text-slate-400">
           Runs MomentumCatalyst strategy on your watchlist tickers. Uses historical data only (no live API calls). Results include Sharpe ratio, max drawdown, and trade log.
         </p>
       </div>
