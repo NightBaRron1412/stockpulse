@@ -110,7 +110,7 @@ def _parse_activity_log() -> list[dict]:
                     pass
     except Exception:
         pass
-    return events[-30:]
+    return list(reversed(events[-30:]))
 
 
 def _get_scan_status() -> dict:
