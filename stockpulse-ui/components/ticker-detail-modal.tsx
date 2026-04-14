@@ -11,14 +11,33 @@ interface TickerDetailModalProps {
   onClose: () => void;
 }
 
+// Cache analysis results for 10 minutes to avoid API exhaustion
+const analysisCache: Record<string, { data: Recommendation; timestamp: number }> = {};
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
   const [data, setData] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!ticker) { setData(null); return; }
+
+    // Check cache first
+    const cached = analysisCache[ticker];
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      setData(cached.data);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    api.analyze(ticker).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
+    api.analyze(ticker)
+      .then((result) => {
+        setData(result);
+        analysisCache[ticker] = { data: result, timestamp: Date.now() };
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
   }, [ticker]);
 
   useEffect(() => {
@@ -70,10 +89,9 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
           {/* Signal Analysis (right 40%) */}
           <div className="flex-[2] overflow-y-auto p-5 space-y-4">
             {loading ? (
-              <div className="space-y-3 animate-pulse">
-                <div className="h-6 bg-slate-700/50 rounded w-32" />
-                <div className="h-4 bg-slate-700/50 rounded w-full" />
-                <div className="h-4 bg-slate-700/50 rounded w-3/4" />
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                <p className="text-sm text-slate-400">Analyzing {ticker}...</p>
               </div>
             ) : data ? (
               <>

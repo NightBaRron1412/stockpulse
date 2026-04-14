@@ -40,7 +40,18 @@ def intraday_check_job():
         if changes:
             generate_intraday_report(changes)
             for change in changes:
-                dispatch_alert(change)
+                # Ensure alert has the right field names for dispatcher
+                alert = {
+                    "ticker": change["ticker"],
+                    "action": change["new_action"],
+                    "confidence": change.get("confidence", 50),
+                    "thesis": f"{change['ticker']}: {change.get('previous_action', '?')} → {change['new_action']}. {change.get('thesis', '')}",
+                    "type": "action_change",
+                    "technical_summary": "",
+                    "catalyst_summary": "",
+                    "invalidation": "",
+                }
+                dispatch_alert(alert)
             logger.info("Intraday: %d changes detected", len(changes))
         else:
             logger.info("Intraday: no changes detected")
