@@ -143,6 +143,27 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
             if confirmation.get("passes", False):
                 action = "BUY"
 
+    # HIGH CONVICTION flag (internal only — not a public action tier)
+    high_conviction = False
+    if action == "BUY" and composite >= 70:
+        if confirmation.get("confirming_count", 0) >= 3:
+            participation = confirmation.get("buckets", {}).get("participation", {}).get("confirms", False)
+            pead = signals.get("pead", {}).get("score", 0)
+            breakout_s = signals.get("breakout", {}).get("score", 0)
+            if participation or abs(pead) > 10 or breakout_s > 20:
+                high_conviction = True
+
+    # Position CAUTION overlay for held positions
+    # Flag if a held long falls below +10 composite
+    position_caution = False
+    try:
+        portfolio = load_portfolio()
+        held_tickers = [p["ticker"] for p in portfolio.get("positions", [])]
+        if ticker in held_tickers and composite < 10:
+            position_caution = True
+    except Exception:
+        pass
+
     # Add risk assessment
     from stockpulse.portfolio.risk import check_concentration_limits
     try:
@@ -169,6 +190,8 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
         "signals": signals,
         "confirmation": confirmation,
         "risk": risk_check,
+        "high_conviction": high_conviction,
+        "position_caution": position_caution,
     }
 
 def rank_recommendations(recommendations: list[dict]) -> list[dict]:

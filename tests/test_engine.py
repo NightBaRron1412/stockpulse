@@ -45,4 +45,8 @@ def test_classify_action():
     assert classify_action(32) == "WATCHLIST"
     assert classify_action(20) == "HOLD"
     assert classify_action(0) == "HOLD"
+    assert classify_action(-29) == "HOLD"
+    assert classify_action(-30) == "CAUTION"
+    assert classify_action(-50) == "CAUTION"
+    assert classify_action(-65) == "SELL"
     assert classify_action(-70) == "SELL"
