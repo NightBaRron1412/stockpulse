@@ -16,39 +16,49 @@ export default function SettingsPage() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editedThresholds, setEditedThresholds] = useState<Record<string, string> | null>(null);
+  const [editedRisk, setEditedRisk] = useState<Record<string, string> | null>(null);
 
   const handleAdd = useCallback(async () => {
     const t = addTicker.trim().toUpperCase();
     if (!t) return;
     setAdding(true);
-    try {
-      await api.addToWatchlist(t);
-      setAddTicker("");
-      refresh();
-    } finally {
-      setAdding(false);
-    }
+    try { await api.addToWatchlist(t); setAddTicker(""); refresh(); } finally { setAdding(false); }
   }, [addTicker, refresh]);
 
   const handleRemove = useCallback(async (ticker: string) => {
     setRemoving(ticker);
-    try {
-      await api.removeFromWatchlist(ticker);
-      refresh();
-    } finally {
-      setRemoving(null);
-    }
+    try { await api.removeFromWatchlist(ticker); refresh(); } finally { setRemoving(null); }
   }, [refresh]);
 
   const handleScan = useCallback(async () => {
     setScanning(true);
-    try {
-      await api.triggerScan();
-      refreshScan();
-    } finally {
-      setScanning(false);
-    }
+    try { await api.triggerScan(); refreshScan(); } finally { setScanning(false); }
   }, [refreshScan]);
+
+  const handleSaveConfig = useCallback(async () => {
+    setSaving(true);
+    try {
+      const update: any = {};
+      if (editedThresholds) {
+        update.thresholds = {};
+        for (const [k, v] of Object.entries(editedThresholds)) {
+          update.thresholds[k] = Number(v);
+        }
+      }
+      if (editedRisk) {
+        update.risk = {};
+        for (const [k, v] of Object.entries(editedRisk)) {
+          update.risk[k] = Number(v);
+        }
+      }
+      await api.updateConfig(update);
+      setEditedThresholds(null);
+      setEditedRisk(null);
+      refresh();
+    } finally { setSaving(false); }
+  }, [editedThresholds, editedRisk, refresh]);
 
   if (loading) {
     return (
@@ -76,9 +86,34 @@ export default function SettingsPage() {
   const scheduling = config?.scheduling ?? {};
   const maxWeight = Math.max(...Object.values(weights).map((w: any) => Number(w) || 0), 0.01);
 
+  const currentThresholds = editedThresholds ?? Object.fromEntries(
+    Object.entries(thresholds).map(([k, v]) => [k, String(v)])
+  );
+  const currentRisk = editedRisk ?? Object.fromEntries(
+    Object.entries(risk).map(([k, v]) => [k, String(v)])
+  );
+  const hasChanges = editedThresholds !== null || editedRisk !== null;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        {hasChanges && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setEditedThresholds(null); setEditedRisk(null); }}
+              className="h-8 border-slate-700 text-slate-400"
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSaveConfig} disabled={saving} className="h-8">
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Watchlist management */}
       <div className="glass-card p-6">
@@ -142,9 +177,12 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Signal Weights */}
+      {/* Signal Weights (read-only) */}
       <div className="glass-card p-6">
-        <h2 className="text-sm font-semibold text-slate-300 mb-4">Signal Weights</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-slate-300">Signal Weights</h2>
+          <span className="text-[10px] text-slate-600 uppercase">Read-only</span>
+        </div>
         {Object.keys(weights).length === 0 ? (
           <p className="text-sm text-slate-500">No strategy data available</p>
         ) : (
@@ -167,36 +205,50 @@ export default function SettingsPage() {
               ))}
           </div>
         )}
+      </div>
 
-        {Object.keys(thresholds).length > 0 && (
-          <>
-            <Separator className="my-4 bg-slate-700/50" />
-            <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Thresholds</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {Object.entries(thresholds).map(([name, val]: [string, any]) => (
-                <div key={name} className="flex justify-between text-xs">
-                  <span className="text-slate-400">{name}</span>
-                  <span className="font-mono-data text-slate-300">{val}</span>
-                </div>
-              ))}
+      {/* Thresholds (editable) */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-slate-300">Thresholds</h2>
+          <span className="text-[10px] text-blue-400 uppercase">Editable</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Object.entries(currentThresholds).map(([name, val]) => (
+            <div key={name} className="space-y-1">
+              <label className="text-xs text-slate-400">{name.replace(/_/g, " ")}</label>
+              <Input
+                value={val}
+                onChange={(e) => {
+                  setEditedThresholds({ ...currentThresholds, [name]: e.target.value });
+                }}
+                className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data"
+              />
             </div>
-          </>
-        )}
+          ))}
+        </div>
+      </div>
 
-        {Object.keys(risk).length > 0 && (
-          <>
-            <Separator className="my-4 bg-slate-700/50" />
-            <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Risk Limits</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {Object.entries(risk).map(([name, val]: [string, any]) => (
-                <div key={name} className="flex justify-between text-xs">
-                  <span className="text-slate-400">{name.replace(/_/g, " ")}</span>
-                  <span className="font-mono-data text-slate-300">{typeof val === "number" ? val : String(val)}</span>
-                </div>
-              ))}
+      {/* Risk Limits (editable) */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-slate-300">Risk Limits</h2>
+          <span className="text-[10px] text-blue-400 uppercase">Editable</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Object.entries(currentRisk).map(([name, val]) => (
+            <div key={name} className="space-y-1">
+              <label className="text-xs text-slate-400">{name.replace(/_/g, " ")}</label>
+              <Input
+                value={val}
+                onChange={(e) => {
+                  setEditedRisk({ ...currentRisk, [name]: e.target.value });
+                }}
+                className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data"
+              />
             </div>
-          </>
-        )}
+          ))}
+        </div>
       </div>
 
       {/* Scan controls */}
@@ -219,10 +271,13 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Schedule info */}
+      {/* Schedule (read-only) */}
       {Object.keys(scheduling).length > 0 && (
         <div className="glass-card p-6">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4">Schedule</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-300">Schedule</h2>
+            <span className="text-[10px] text-slate-600 uppercase">Read-only</span>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {Object.entries(scheduling).map(([name, val]: [string, any]) => (
               <div key={name} className="flex justify-between text-xs">

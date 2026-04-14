@@ -327,6 +327,28 @@ def get_config_endpoint():
 # Watchlist management
 # ═══════════════════════════════════════════════════
 
+@app.post("/api/config/update")
+def update_config(data: dict):
+    """Update thresholds and risk params in strategies.yaml."""
+    from stockpulse.config.settings import load_strategies
+    import yaml
+    strat = load_strategies()
+    # Only allow updating thresholds and risk
+    if "thresholds" in data:
+        for key, val in data["thresholds"].items():
+            if key in strat.get("thresholds", {}):
+                strat["thresholds"][key] = val
+    if "risk" in data:
+        for key, val in data["risk"].items():
+            if key in strat.get("risk", {}):
+                strat["risk"][key] = val
+    # Write back
+    strat_path = PROJECT_ROOT / "stockpulse" / "config" / "strategies.yaml"
+    with open(strat_path, "w") as f:
+        yaml.dump(strat, f, default_flow_style=False, sort_keys=False)
+    return {"status": "updated"}
+
+
 @app.post("/api/watchlist/add")
 def add_to_watchlist(data: dict):
     from stockpulse.config.settings import load_watchlists, save_watchlists
