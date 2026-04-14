@@ -225,9 +225,11 @@ def calc_breakout_signal(df: pd.DataFrame) -> float:
     # Volume confirmation
     if breakout_count > 0 and require_volume:
         if rvol >= rvol_min:
-            score *= 1.3  # confirmed breakout
+            score *= 1.3  # confirmed breakout — stronger
+        elif rvol >= 1.0:
+            pass  # average volume — keep base score
         else:
-            score *= 0.5  # unconfirmed -- weaker
+            score *= 0.7  # below-average volume — mild discount
 
     # Fakeout check: was there a breakout 1-3 days ago that failed?
     if len(df) > 5:
@@ -241,10 +243,11 @@ def calc_breakout_signal(df: pd.DataFrame) -> float:
     return _clamp(score)
 
 def calc_gap_signal(df: pd.DataFrame) -> float:
-    """Gap signal: gap up/down from prior close. Small gaps (0.5-1%) mild,
-    large gaps (>2%) strong. Direction matches gap direction."""
+    """Gap signal: gap up/down from prior close.
+    Gaps <0.5% ignored. 0.5-1% mild. 1-2% moderate. >2% strong.
+    Capped so a normal 1-2% gap doesn't dominate the composite."""
     cfg = _get_signal_config("gap")
-    threshold_pct = cfg.get("threshold_pct", 2.0)
+    threshold_pct = cfg.get("threshold_pct", 0.5)
     if len(df) < 2:
         return 0.0
     current_open = float(df["Open"].iloc[-1])
@@ -253,12 +256,14 @@ def calc_gap_signal(df: pd.DataFrame) -> float:
         return 0.0
     gap_pct = ((current_open - prev_close) / prev_close) * 100
 
-    if abs(gap_pct) < 0.3:
+    if abs(gap_pct) < 0.5:
         return 0.0  # too small to matter
 
-    # Graduated scoring: small gaps get mild scores, big gaps get strong
-    score = (gap_pct / threshold_pct) * 40
-    return _clamp(score)
+    # Graduated scoring with soft cap
+    # 0.5% gap = ~15 score, 1% = ~30, 2% = ~50, 3%+ = ~60-70 max
+    score = gap_pct * 25  # 1% = 25 points
+    # Soft cap at ±70 (a gap alone shouldn't be the entire signal)
+    return _clamp(score, -70.0, 70.0)
 
 def calc_adx_signal(df: pd.DataFrame) -> float:
     """Trend strength signal using ADX and directional indicators.
