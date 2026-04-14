@@ -72,7 +72,7 @@ signals:
 thresholds:
   buy: 55
   watchlist: 32
-  watchlist_relaxed: 30
+  watchlist_relaxed: 25
   sell: -65
   exit: 15
   confidence_min: 55
