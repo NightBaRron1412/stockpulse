@@ -145,11 +145,7 @@ def _parse_8k_items(description: str) -> list[str]:
 
 
 def score_filings(ticker: str, lookback_days: int = 30) -> float:
-    """Score recent filings using expert's importance map.
-
-    Returns a score from -100 to +100.
-    Positive = catalysts present, negative = red flags detected.
-    """
+    """Score recent filings using expert's importance map + LLM direction."""
     filings = get_recent_filings(ticker, lookback_days)
     if not filings:
         return 0.0
@@ -160,14 +156,29 @@ def score_filings(ticker: str, lookback_days: int = 30) -> float:
         form = filing["form"]
 
         if filing["is_negative"]:
-            # Red-flag items are scored negatively
             score -= importance * 60
-        elif form in ("8-K", "8-K/A"):
-            # Normal 8-K: importance determines magnitude
-            score += importance * 30
+            continue
+
+        # For 8-K filings, try to get LLM direction
+        if form in ("8-K", "8-K/A") and importance >= 0.50:
+            try:
+                from stockpulse.llm.filing_analyzer import analyze_filing_direction
+                direction = analyze_filing_direction(
+                    ticker, form, filing.get("items", []), filing.get("description", "")
+                )
+                if direction["direction"] == "bullish":
+                    score += importance * 35 * (0.5 + direction["confidence"] * 0.5)
+                elif direction["direction"] == "bearish":
+                    score -= importance * 35 * (0.5 + direction["confidence"] * 0.5)
+                else:
+                    score += importance * 10  # neutral filing still has information value
+            except Exception:
+                score += importance * 15  # fallback: assume mild positive
         elif form in ("10-K", "10-K/A", "10-Q", "10-Q/A"):
             score += importance * 10
         elif "13D" in form or "13G" in form:
-            score += importance * 25  # beneficial ownership = notable catalyst
+            score += importance * 25
+        else:
+            score += importance * 15
 
     return max(-100.0, min(100.0, score))
