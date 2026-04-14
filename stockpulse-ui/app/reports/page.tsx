@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -81,16 +81,36 @@ export default function ReportsPage() {
     );
   }
 
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+
   const reportList = reports ?? [];
 
-  // Group reports by date
-  const grouped: Record<string, Report[]> = {};
-  for (const r of reportList) {
-    const key = r.date || "Unknown";
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(r);
-  }
-  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  // Sort order within a day: morning first, then intraday by time, then eod, then weekly
+  const typePriority: Record<string, number> = { morning: 0, intraday: 1, eod: 2, weekly: 3, other: 4 };
+
+  // Group reports by date and sort within each group
+  const { grouped, sortedDates } = useMemo(() => {
+    const g: Record<string, Report[]> = {};
+    for (const r of reportList) {
+      const key = r.date || "Unknown";
+      if (!g[key]) g[key] = [];
+      g[key].push(r);
+    }
+    // Sort within each day
+    for (const date of Object.keys(g)) {
+      g[date].sort((a, b) => (typePriority[a.type] ?? 4) - (typePriority[b.type] ?? 4));
+    }
+    return { grouped: g, sortedDates: Object.keys(g).sort((a, b) => b.localeCompare(a)) };
+  }, [reportList]);
+
+  const toggleDay = (date: string) => {
+    setCollapsedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -106,12 +126,22 @@ export default function ReportsPage() {
           <div className="lg:col-span-3 glass-card p-0 overflow-hidden">
             <ScrollArea style={{ height: "calc(100vh - 200px)" }}>
               <div className="divide-y divide-slate-700/30">
-                {sortedDates.map((date) => (
+                {sortedDates.map((date) => {
+                  const isCollapsed = collapsedDays.has(date);
+                  const dayReports = grouped[date];
+                  return (
                   <div key={date}>
-                    <div className="px-4 py-2 bg-slate-800/30 text-xs text-slate-500 font-medium sticky top-0 backdrop-blur-sm">
-                      {date}
-                    </div>
-                    {grouped[date].map((r) => (
+                    <button
+                      onClick={() => toggleDay(date)}
+                      className="w-full px-4 py-2 bg-slate-800/30 text-xs text-slate-500 font-medium sticky top-0 backdrop-blur-sm flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+                    >
+                      <span>{date}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-slate-600">{dayReports.length} report{dayReports.length !== 1 ? "s" : ""}</span>
+                        <span className="text-[10px]">{isCollapsed ? "▶" : "▼"}</span>
+                      </span>
+                    </button>
+                    {!isCollapsed && dayReports.map((r) => (
                       <button
                         key={r.filename}
                         onClick={() => handleSelect(r.filename)}
@@ -129,7 +159,8 @@ export default function ReportsPage() {
                       </button>
                     ))}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </ScrollArea>
           </div>
