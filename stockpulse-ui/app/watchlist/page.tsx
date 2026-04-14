@@ -130,7 +130,7 @@ export default function WatchlistPage() {
       </div>
 
       {/* Table */}
-      <div className="glass-card p-0">
+      <div className="rounded-xl border border-slate-700/50 bg-slate-900/60">
         {items.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             {data?.length === 0
