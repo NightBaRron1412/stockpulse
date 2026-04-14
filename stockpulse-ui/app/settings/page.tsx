@@ -17,6 +17,10 @@ export default function SettingsPage() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [btStartDate, setBtStartDate] = useState("2025-07-01");
+  const [btEndDate, setBtEndDate] = useState("2026-01-01");
+  const [backtesting, setBacktesting] = useState(false);
+  const [btStatus, setBtStatus] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [editedThresholds, setEditedThresholds] = useState<Record<string, string> | null>(null);
   const [editedRisk, setEditedRisk] = useState<Record<string, string> | null>(null);
@@ -276,6 +280,92 @@ export default function SettingsPage() {
             <p>Next scheduled: <span className="font-mono-data">{scanStatus.next_scheduled ?? "--"}</span></p>
           </div>
         )}
+      </div>
+
+      {/* Backtesting */}
+      <div className="glass-card p-6">
+        <h2 className="text-sm font-semibold text-slate-300 mb-4">Backtesting</h2>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="space-y-1">
+            <p className="text-xs text-slate-400">Start Date</p>
+            <Input
+              type="date"
+              value={btStartDate}
+              onChange={(e) => setBtStartDate(e.target.value)}
+              className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-36"
+            />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-400">End Date</p>
+            <Input
+              type="date"
+              value={btEndDate}
+              onChange={(e) => setBtEndDate(e.target.value)}
+              className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-36"
+            />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-400">&nbsp;</p>
+            <Button
+              onClick={async () => {
+                setBacktesting(true);
+                setBtStatus({ running: true, progress: "Starting..." });
+                try {
+                  await api.triggerBacktest(btStartDate, btEndDate);
+                  // Poll for completion
+                  const poll = setInterval(async () => {
+                    const s = await api.backtestStatus();
+                    setBtStatus(s);
+                    if (!s.running) {
+                      clearInterval(poll);
+                      setBacktesting(false);
+                    }
+                  }, 3000);
+                } catch {
+                  setBacktesting(false);
+                  setBtStatus({ running: false, error: "Failed to start backtest" });
+                }
+              }}
+              disabled={backtesting}
+              className="h-8"
+            >
+              {backtesting ? "Running..." : "Run Backtest"}
+            </Button>
+          </div>
+        </div>
+
+        {btStatus && (
+          <div className="mt-3 text-xs space-y-1">
+            {btStatus.running && (
+              <div className="flex items-center gap-2 text-blue-400">
+                <div className="w-2 h-2 rounded-full bg-blue-500 pulse-scan" />
+                <span className="font-mono-data">{btStatus.progress}</span>
+              </div>
+            )}
+            {btStatus.error && (
+              <p className="text-red-400">Error: {btStatus.error}</p>
+            )}
+            {btStatus.result?.completed && (
+              <div className="space-y-2">
+                <p className="text-green-400">Backtest completed ({btStatus.result.start_date} to {btStatus.result.end_date})</p>
+                {btStatus.result.tearsheet && (
+                  <a
+                    href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"}/api/backtest/tearsheet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
+                  >
+                    View Tearsheet →
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="mt-3 text-[11px] text-slate-600">
+          Runs MomentumCatalyst strategy on your watchlist tickers. Uses historical data only (no live API calls). Results include Sharpe ratio, max drawdown, and trade log.
+        </p>
       </div>
 
       {/* Schedule */}

@@ -371,6 +371,68 @@ def trigger_scan():
 
 
 # ═══════════════════════════════════════════════════
+# Backtesting
+# ═══════════════════════════════════════════════════
+
+_backtest_status = {"running": False, "progress": "", "result": None, "error": None}
+
+
+@app.get("/api/backtest/status")
+def get_backtest_status():
+    return _backtest_status
+
+
+@app.post("/api/backtest")
+def trigger_backtest(data: dict = {}):
+    if _backtest_status["running"]:
+        return {"status": "already_running"}
+
+    start_date = data.get("start_date", "2025-01-01")
+    end_date = data.get("end_date", "2026-01-01")
+
+    def _run():
+        _backtest_status["running"] = True
+        _backtest_status["progress"] = "Starting..."
+        _backtest_status["error"] = None
+        _backtest_status["result"] = None
+        try:
+            from stockpulse.backtests.runner import run_backtest
+            _backtest_status["progress"] = f"Running {start_date} to {end_date}..."
+            run_backtest(start_date=start_date, end_date=end_date)
+            # Find the latest tearsheet
+            logs_dir = PROJECT_ROOT / "logs"
+            tearsheets = sorted(logs_dir.glob("*_tearsheet.html"), reverse=True) if logs_dir.exists() else []
+            _backtest_status["result"] = {
+                "tearsheet": str(tearsheets[0]) if tearsheets else None,
+                "start_date": start_date,
+                "end_date": end_date,
+                "completed": True,
+            }
+            _backtest_status["progress"] = "Complete"
+        except Exception as e:
+            _backtest_status["error"] = str(e)
+            _backtest_status["progress"] = "Failed"
+        finally:
+            _backtest_status["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"status": "started"}
+
+
+@app.get("/api/backtest/tearsheet")
+def get_tearsheet():
+    """Serve the latest backtest tearsheet HTML."""
+    logs_dir = PROJECT_ROOT / "logs"
+    if not logs_dir.exists():
+        raise HTTPException(404, "No backtest results")
+    tearsheets = sorted(logs_dir.glob("*_tearsheet.html"), reverse=True)
+    if not tearsheets:
+        raise HTTPException(404, "No tearsheet found")
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=tearsheets[0].read_text())
+
+
+# ═══════════════════════════════════════════════════
 # Market data
 # ═══════════════════════════════════════════════════
 

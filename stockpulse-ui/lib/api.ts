@@ -32,4 +32,10 @@ export const api = {
     fetcher<any>("/api/config/update", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
     }),
+  backtestStatus: () => fetcher<any>("/api/backtest/status"),
+  triggerBacktest: (startDate: string, endDate: string) =>
+    fetcher<any>("/api/backtest", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+    }),
 };
