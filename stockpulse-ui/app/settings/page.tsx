@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { getSignalLabel } from "@/lib/signal-labels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -191,7 +192,7 @@ export default function SettingsPage() {
               .sort(([, a]: any, [, b]: any) => (b ?? 0) - (a ?? 0))
               .map(([name, weight]: [string, any]) => (
                 <div key={name} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 w-36 truncate text-right">{name}</span>
+                  <span className="text-xs text-slate-400 w-36 truncate text-right">{getSignalLabel(name)}</span>
                   <div className="flex-1 h-2 bg-slate-700/30 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"

@@ -1,14 +1,20 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Suspense, useState, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { actionBadgeClass, formatScore, cn } from "@/lib/utils";
+import { getSignalLabel, getSignalDescription } from "@/lib/signal-labels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Recommendation } from "@/lib/types";
 
-export default function SignalsPage() {
-  const [ticker, setTicker] = useState("");
+function SignalsContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialTicker = searchParams.get("ticker") ?? "";
+  const [ticker, setTicker] = useState(initialTicker);
   const [data, setData] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,13 +27,22 @@ export default function SignalsPage() {
     try {
       const result = await api.analyze(t);
       setData(result);
+      router.replace(`/signals?ticker=${t}`, { scroll: false });
     } catch (e: any) {
       setError(e.message || "Analysis failed");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [ticker]);
+  }, [ticker, router]);
+
+  useEffect(() => {
+    if (initialTicker) {
+      handleAnalyze();
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -105,7 +120,14 @@ export default function SignalsPage() {
                   const isPositive = weighted >= 0;
                   return (
                     <div key={name} className="flex items-center gap-3">
-                      <span className="text-xs text-slate-400 w-36 truncate text-right">{name}</span>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help text-xs text-slate-400 w-36 truncate text-right">
+                          {getSignalLabel(name)}
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[300px] bg-slate-800 border-slate-700 text-slate-200">
+                          <p className="text-xs">{getSignalDescription(name)}</p>
+                        </TooltipContent>
+                      </Tooltip>
                       <div className="flex-1 flex items-center h-5">
                         {/* center-aligned bar */}
                         <div className="w-full relative h-2 bg-slate-700/30 rounded-full">
@@ -181,5 +203,20 @@ export default function SignalsPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function SignalsPage() {
+  return (
+    <Suspense fallback={
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold">Signal Analysis</h1>
+        <div className="glass-card p-6 animate-pulse">
+          <div className="h-12 bg-slate-700/20 rounded" />
+        </div>
+      </div>
+    }>
+      <SignalsContent />
+    </Suspense>
   );
 }
