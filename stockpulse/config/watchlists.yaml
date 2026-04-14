@@ -41,9 +41,6 @@ priority:
   score: 37.9
   ticker: JBL
 - action: WATCHLIST
-  score: 36.9
-  ticker: CLS
-- action: WATCHLIST
   score: 35.7
   ticker: C
 - action: WATCHLIST
@@ -197,8 +194,8 @@ user:
 - TSLA
 - META
 - MRVL
-- CLS
 - SNDK
 - NOW
 - DT
 - CLSK
+- CLS

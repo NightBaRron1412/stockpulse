@@ -210,11 +210,11 @@ export default function SettingsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(currentThresholds).map(([name, val]) => (
             <div key={name} className="space-y-1">
-              <span className="cursor-help text-xs text-slate-400" title={getThresholdDescription(name)}>{getThresholdLabel(name)}</span>
+              <p className="cursor-help text-xs text-slate-400" title={getThresholdDescription(name)}>{getThresholdLabel(name)}</p>
               {editingThresholds ? (
                 <Input value={val} onChange={(e) => setEditedThresholds({...currentThresholds, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
               ) : (
-                <span className="font-mono-data text-slate-300">{val}</span>
+                <p className="font-mono-data text-slate-200 text-sm">{val}</p>
               )}
             </div>
           ))}
@@ -237,11 +237,11 @@ export default function SettingsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(currentRisk).map(([name, val]) => (
             <div key={name} className="space-y-1">
-              <span className="cursor-help text-xs text-slate-400" title={getRiskDescription(name)}>{getRiskLabel(name)}</span>
+              <p className="cursor-help text-xs text-slate-400" title={getRiskDescription(name)}>{getRiskLabel(name)}</p>
               {editingRisk ? (
                 <Input value={val} onChange={(e) => setEditedRisk({...currentRisk, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
               ) : (
-                <span className="font-mono-data text-slate-300">{val}</span>
+                <p className="font-mono-data text-slate-200 text-sm">{val}</p>
               )}
             </div>
           ))}
