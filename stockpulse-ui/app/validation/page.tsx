@@ -2,80 +2,28 @@
 
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, actionBadgeClass, formatScore } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-interface ValidationStats {
-  period: string;
-  signals_count: number;
-  avg_return: number;
-  excess_vs_spy: number;
-  hit_rate: number;
-}
-
-interface TestResult {
-  test: string;
-  statistic: number;
-  p_value: number;
-  significant: boolean;
-}
-
-interface ValidationData {
-  phase: string;
-  phase_progress: number;
-  stats: ValidationStats | null;
-  test_results: TestResult[];
-  verdict: string;
-  verdict_status: "positive" | "negative" | "neutral";
-  recent_signals: Array<{
-    ticker: string;
-    action: string;
-    score: number;
-    return_pct: number | null;
-    date: string;
-  }>;
-}
-
-const PHASE_ORDER = ["PILOT", "MEANINGFUL", "SERIOUS", "VALIDATED"];
-
-function phaseColor(phase: string): string {
-  switch (phase) {
-    case "PILOT": return "text-blue-400 bg-blue-500/10 border-blue-500/20";
-    case "MEANINGFUL": return "text-violet-400 bg-violet-500/10 border-violet-500/20";
-    case "SERIOUS": return "text-orange-400 bg-orange-500/10 border-orange-500/20";
-    case "VALIDATED": return "text-green-400 bg-green-500/10 border-green-500/20";
-    default: return "text-slate-400 bg-slate-500/10 border-slate-500/20";
-  }
-}
-
-function verdictColor(status: string): string {
-  switch (status) {
-    case "positive": return "border-green-500/30 bg-green-500/5 text-green-400";
-    case "negative": return "border-red-500/30 bg-red-500/5 text-red-400";
-    default: return "border-slate-500/30 bg-slate-500/5 text-slate-400";
-  }
-}
+const PHASES = [
+  { name: "PILOT", min: 0, label: "0-50 signals" },
+  { name: "MEANINGFUL", min: 75, label: "75-100 signals" },
+  { name: "SERIOUS", min: 150, label: "150-250 signals" },
+  { name: "VALIDATED", min: 250, label: "250+ signals" },
+];
 
 export default function ValidationPage() {
-  const { data, loading, error } = usePolling<ValidationData>(api.validation, 60000);
+  const { data, loading, error } = usePolling<any>(api.validation, 60000);
 
   if (loading) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Model Validation</h1>
-        <div className="glass-card p-6 animate-pulse">
-          <div className="h-8 bg-slate-700/50 rounded w-32 mb-4" />
-          <div className="h-4 bg-slate-700/50 rounded w-full mb-2" />
-          <div className="h-4 bg-slate-700/50 rounded w-3/4" />
-        </div>
+        <div className="glass-card p-6 animate-pulse"><div className="h-32 bg-slate-700/20 rounded" /></div>
       </div>
     );
   }
@@ -84,165 +32,241 @@ export default function ValidationPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Model Validation</h1>
-        <div className="glass-card p-6 text-red-400">Failed to load validation data: {error}</div>
+        <div className="glass-card p-6 text-red-400">Failed to load: {error}</div>
       </div>
     );
   }
 
-  if (!data) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Model Validation</h1>
-        <div className="glass-card p-8 text-center text-slate-500">
-          No validation data yet -- run more scans to start tracking model performance
-        </div>
-      </div>
-    );
-  }
+  const signals = data?.signals ?? [];
+  const stats = data?.stats ?? {};
+  const validation = data?.validation ?? {};
+  const sampleSize = validation?.sample_size ?? {};
+  const tests = validation?.tests ?? {};
+  const verdict = validation?.verdict ?? {};
+  const status = validation?.status ?? "collecting";
+  const phase = sampleSize?.phase ?? "pilot";
+  const buyCount = sampleSize?.buy_signals ?? 0;
+  const watchlistCount = sampleSize?.watchlist_signals ?? 0;
+  const distinctDates = sampleSize?.distinct_buy_dates ?? 0;
+  const totalSignals = signals.length;
 
-  const phaseIndex = PHASE_ORDER.indexOf(data.phase);
+  // Phase progress
+  const phaseIndex = PHASES.findIndex(p => p.name.toLowerCase() === phase.toLowerCase());
+  const nextPhase = PHASES[Math.min(phaseIndex + 1, PHASES.length - 1)];
+  const progressPct = nextPhase ? Math.min((totalSignals / nextPhase.min) * 100, 100) : 100;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Model Validation</h1>
 
-      {/* Phase badge + progress */}
+      {/* Phase + Progress */}
       <div className="glass-card p-6">
-        <div className="flex items-center gap-6 mb-4">
-          <span className={cn("px-4 py-2 rounded-lg text-lg font-bold border", phaseColor(data.phase))}>
-            {data.phase}
+        <div className="flex items-center gap-4 mb-4">
+          <span className={cn(
+            "px-4 py-2 rounded-lg text-lg font-bold border",
+            phase === "validated" ? "border-green-500/30 bg-green-500/10 text-green-400" :
+            phase === "serious" ? "border-blue-500/30 bg-blue-500/10 text-blue-400" :
+            "border-slate-500/30 bg-slate-500/10 text-slate-300"
+          )}>
+            {phase.toUpperCase()}
           </span>
           <div className="flex gap-1">
-            {PHASE_ORDER.map((p, i) => (
-              <div
-                key={p}
-                className={cn(
-                  "h-2 w-16 rounded-full",
-                  i <= phaseIndex ? "bg-blue-500" : "bg-slate-700/50"
-                )}
-              />
+            {PHASES.map((p, i) => (
+              <div key={p.name} className={cn("h-2 w-16 rounded-full", i <= phaseIndex ? "bg-blue-500" : "bg-slate-700/50")} />
             ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Total Tracked</p>
+            <p className="text-2xl font-bold font-mono-data text-slate-200">{totalSignals}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">BUY Signals</p>
+            <p className="text-2xl font-bold font-mono-data text-green-400">{buyCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">WATCHLIST Signals</p>
+            <p className="text-2xl font-bold font-mono-data text-blue-400">{watchlistCount}</p>
           </div>
         </div>
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-slate-400">
-            <span>Progress to next phase</span>
-            <span className="font-mono-data">{data.phase_progress}%</span>
+            <span>Progress to {nextPhase?.name ?? "VALIDATED"}</span>
+            <span className="font-mono-data">{totalSignals}/{nextPhase?.min ?? 250}</span>
           </div>
-          <Progress value={data.phase_progress} className="h-2 bg-slate-700/50" />
+          <Progress value={progressPct} className="h-2 bg-slate-700/50" />
         </div>
       </div>
 
-      {/* Stats table */}
-      {data.stats && (
-        <div className="glass-card p-0 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/50">
-            <h2 className="text-sm font-semibold text-slate-300">Performance Statistics</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-700/30">
-            <div className="p-5">
-              <p className="text-xs text-slate-400 mb-1">Period</p>
-              <p className="text-lg font-semibold text-slate-200">{data.stats.period}</p>
-            </div>
-            <div className="p-5">
-              <p className="text-xs text-slate-400 mb-1">Total Signals</p>
-              <p className="text-lg font-bold font-mono-data text-slate-200">{data.stats.signals_count}</p>
-            </div>
-            <div className="p-5">
-              <p className="text-xs text-slate-400 mb-1">Avg Return</p>
-              <p className={cn("text-lg font-bold font-mono-data", (data.stats.avg_return ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
-                {data.stats.avg_return != null ? `${data.stats.avg_return >= 0 ? "+" : ""}${data.stats.avg_return.toFixed(2)}%` : "--"}
-              </p>
-            </div>
-            <div className="p-5">
-              <p className="text-xs text-slate-400 mb-1">Hit Rate</p>
-              <p className="text-lg font-bold font-mono-data text-slate-200">{data.stats.hit_rate != null ? `${data.stats.hit_rate.toFixed(0)}%` : "--"}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Test results */}
-      {data.test_results && data.test_results.length > 0 && (
-        <div className="glass-card p-0 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/50">
-            <h2 className="text-sm font-semibold text-slate-300">Statistical Tests</h2>
-          </div>
+      {/* Stats (if available) */}
+      {Object.keys(stats).length > 0 && (
+        <div className="glass-card p-6">
+          <h2 className="text-sm font-semibold text-slate-300 mb-4">Performance by Horizon</h2>
           <Table>
             <TableHeader>
               <TableRow className="border-slate-700/50 hover:bg-transparent">
-                <TableHead className="text-slate-400 text-xs">Test</TableHead>
-                <TableHead className="text-slate-400 text-xs text-right">Statistic</TableHead>
-                <TableHead className="text-slate-400 text-xs text-right">p-value</TableHead>
-                <TableHead className="text-slate-400 text-xs">Significant</TableHead>
+                <TableHead className="text-slate-400 text-xs">Period</TableHead>
+                <TableHead className="text-slate-400 text-xs text-right">Signals</TableHead>
+                <TableHead className="text-slate-400 text-xs text-right">Avg Return</TableHead>
+                <TableHead className="text-slate-400 text-xs text-right">Excess vs SPY</TableHead>
+                <TableHead className="text-slate-400 text-xs text-right">Hit Rate</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.test_results.map((test) => (
-                <TableRow key={test.test} className="border-slate-700/30 hover:bg-slate-800/30">
-                  <TableCell className="text-sm">{test.test}</TableCell>
-                  <TableCell className="font-mono-data text-right text-xs">{test.statistic != null ? test.statistic.toFixed(4) : "--"}</TableCell>
-                  <TableCell className={cn(
-                    "font-mono-data text-right text-xs",
-                    (test.p_value ?? 1) < 0.05 ? "text-green-400" : "text-slate-400"
-                  )}>
-                    {test.p_value != null ? test.p_value.toFixed(4) : "--"}
-                  </TableCell>
-                  <TableCell>
-                    {test.significant ? (
-                      <span className="text-green-400 text-xs font-medium">Yes</span>
-                    ) : (
-                      <span className="text-slate-500 text-xs">No</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {["5d", "10d", "20d"].map((period) => {
+                const s = stats[period];
+                if (!s || !s.count) return null;
+                return (
+                  <TableRow key={period} className="border-slate-700/30">
+                    <TableCell className="font-semibold">{period}</TableCell>
+                    <TableCell className="text-right font-mono-data text-xs">{s.count}</TableCell>
+                    <TableCell className={cn("text-right font-mono-data text-xs", (s.avg_return ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                      {s.avg_return != null ? `${s.avg_return >= 0 ? "+" : ""}${s.avg_return.toFixed(2)}%` : "--"}
+                    </TableCell>
+                    <TableCell className={cn("text-right font-mono-data text-xs", (s.avg_excess_vs_spy ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                      {s.avg_excess_vs_spy != null ? `${s.avg_excess_vs_spy >= 0 ? "+" : ""}${s.avg_excess_vs_spy.toFixed(2)}%` : "--"}
+                    </TableCell>
+                    <TableCell className="text-right font-mono-data text-xs">
+                      {s.hit_rate != null ? `${s.hit_rate.toFixed(0)}%` : "--"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {/* Statistical Tests (if available) */}
+      {Object.keys(tests).length > 0 && (
+        <div className="glass-card p-6">
+          <h2 className="text-sm font-semibold text-slate-300 mb-4">Statistical Tests (10d BUY vs SPY)</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {tests.paired_t && (
+              <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
+                <p className="text-xs text-slate-400 mb-1">Paired t-test</p>
+                <p className="font-mono-data text-sm">
+                  Mean excess: <span className={cn((tests.paired_t.mean_excess ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>{tests.paired_t.mean_excess?.toFixed(3) ?? "--"}%</span>
+                </p>
+                <p className="font-mono-data text-xs text-slate-500">
+                  p = {tests.paired_t.p_value_one_sided?.toFixed(4) ?? "--"} {tests.paired_t.significant_at_05 ? "✓ sig" : ""}
+                </p>
+              </div>
+            )}
+            {tests.binomial_hit_rate && (
+              <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
+                <p className="text-xs text-slate-400 mb-1">Hit Rate</p>
+                <p className="font-mono-data text-sm">
+                  {tests.binomial_hit_rate.hits ?? 0}/{tests.binomial_hit_rate.total ?? 0} = <span className="text-blue-400">{tests.binomial_hit_rate.hit_rate?.toFixed(0) ?? "--"}%</span>
+                </p>
+                <p className="font-mono-data text-xs text-slate-500">
+                  Wilson 95% CI: [{tests.binomial_hit_rate.wilson_95_ci?.[0]?.toFixed(0) ?? "--"}%, {tests.binomial_hit_rate.wilson_95_ci?.[1]?.toFixed(0) ?? "--"}%]
+                </p>
+              </div>
+            )}
+            {tests.bootstrap && (
+              <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
+                <p className="text-xs text-slate-400 mb-1">Bootstrap 95% CI</p>
+                <p className="font-mono-data text-sm">
+                  [{tests.bootstrap.ci_95_lower?.toFixed(3) ?? "--"}%, {tests.bootstrap.ci_95_upper?.toFixed(3) ?? "--"}%]
+                </p>
+                <p className="font-mono-data text-xs text-slate-500">
+                  {tests.bootstrap.ci_above_zero ? "✓ Above zero" : "Straddles zero"}
+                </p>
+              </div>
+            )}
+            {tests.buy_vs_watchlist && (
+              <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
+                <p className="text-xs text-slate-400 mb-1">BUY vs WATCHLIST</p>
+                <p className="font-mono-data text-sm">
+                  BUY: <span className="text-green-400">{tests.buy_vs_watchlist.buy_mean?.toFixed(3) ?? "--"}%</span> vs WL: <span className="text-blue-400">{tests.buy_vs_watchlist.watchlist_mean?.toFixed(3) ?? "--"}%</span>
+                </p>
+                <p className="font-mono-data text-xs text-slate-500">
+                  {tests.buy_vs_watchlist.monotonic ? "✓ Monotonic" : "Not monotonic"}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* Verdict */}
-      <div className={cn("glass-card p-6 border", verdictColor(data.verdict_status))}>
-        <h3 className="text-sm font-semibold mb-2">Verdict</h3>
-        <p className="text-lg">{data.verdict}</p>
+      <div className={cn("glass-card p-6 border-l-4",
+        status === "working" ? "border-l-green-500" :
+        status === "needs_calibration" ? "border-l-orange-500" :
+        "border-l-blue-500"
+      )}>
+        <h2 className="text-sm font-semibold text-slate-300 mb-2">Verdict</h2>
+        {status === "working" ? (
+          <p className="text-green-400 font-semibold">MODEL IS WORKING</p>
+        ) : status === "needs_calibration" ? (
+          <>
+            <p className="text-orange-400 font-semibold">NEEDS CALIBRATION</p>
+            <div className="mt-2 text-xs text-slate-400 space-y-1">
+              {Object.entries(verdict).map(([k, v]: [string, any]) => (
+                <p key={k}>{v ? "✓" : "✗"} {k.replace(/_/g, " ")}</p>
+              ))}
+            </div>
+          </>
+        ) : status === "insufficient_data" ? (
+          <p className="text-slate-400">Need 10+ resolved BUY signals to begin testing. Currently tracking {totalSignals} signals — results will appear after 5+ trading days.</p>
+        ) : (
+          <p className="text-blue-400">Collecting data. {totalSignals} signals tracked so far. Statistical tests will run automatically once signals reach their 5/10/20 day checkpoints.</p>
+        )}
       </div>
 
-      {/* Recent signals */}
-      {data.recent_signals && data.recent_signals.length > 0 && (
+      {/* Tracked Signals Table */}
+      {signals.length > 0 && (
         <div className="glass-card p-0 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/50">
-            <h2 className="text-sm font-semibold text-slate-300">Recent Signals</h2>
+            <h2 className="text-sm font-semibold text-slate-300">Tracked Signals ({signals.length})</h2>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow className="border-slate-700/50 hover:bg-transparent">
-                <TableHead className="text-slate-400 text-xs">Ticker</TableHead>
-                <TableHead className="text-slate-400 text-xs">Action</TableHead>
-                <TableHead className="text-slate-400 text-xs text-right">Score</TableHead>
-                <TableHead className="text-slate-400 text-xs text-right">Return</TableHead>
-                <TableHead className="text-slate-400 text-xs">Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.recent_signals.map((sig, i) => (
-                <TableRow key={`${sig.ticker}-${i}`} className="border-slate-700/30 hover:bg-slate-800/30">
-                  <TableCell className="font-semibold">{sig.ticker}</TableCell>
-                  <TableCell className="text-xs">{sig.action}</TableCell>
-                  <TableCell className="font-mono-data text-right text-xs">{sig.score != null ? sig.score.toFixed(1) : "--"}</TableCell>
-                  <TableCell className={cn(
-                    "font-mono-data text-right text-xs",
-                    sig.return_pct !== null
-                      ? sig.return_pct >= 0 ? "text-green-400" : "text-red-400"
-                      : "text-slate-500"
-                  )}>
-                    {sig.return_pct !== null ? `${sig.return_pct >= 0 ? "+" : ""}${sig.return_pct.toFixed(2)}%` : "--"}
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-400 font-mono-data">{sig.date}</TableCell>
+          <ScrollArea style={{ maxHeight: "400px" }}>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-slate-700/50 hover:bg-transparent">
+                  <TableHead className="text-slate-400 text-xs">Date</TableHead>
+                  <TableHead className="text-slate-400 text-xs">Ticker</TableHead>
+                  <TableHead className="text-slate-400 text-xs">Action</TableHead>
+                  <TableHead className="text-slate-400 text-xs text-right">Entry</TableHead>
+                  <TableHead className="text-slate-400 text-xs text-right">Score</TableHead>
+                  <TableHead className="text-slate-400 text-xs text-right">5d</TableHead>
+                  <TableHead className="text-slate-400 text-xs text-right">10d</TableHead>
+                  <TableHead className="text-slate-400 text-xs text-right">20d</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {[...signals].reverse().map((sig: any, i: number) => {
+                  const cp5 = sig.checkpoints?.["5d"];
+                  const cp10 = sig.checkpoints?.["10d"];
+                  const cp20 = sig.checkpoints?.["20d"];
+                  return (
+                    <TableRow key={i} className="border-slate-700/30">
+                      <TableCell className="font-mono-data text-xs text-slate-400">{sig.signal_date}</TableCell>
+                      <TableCell className="font-semibold text-sm">{sig.ticker}</TableCell>
+                      <TableCell>
+                        <span className={cn("px-2 py-0.5 rounded text-xs font-medium", actionBadgeClass(sig.action))}>
+                          {sig.action}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono-data text-xs">${(sig.entry_price ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono-data text-xs">{formatScore(sig.composite_score ?? 0)}</TableCell>
+                      <TableCell className={cn("text-right font-mono-data text-xs", cp5?.checked ? ((cp5.excess_vs_spy ?? 0) >= 0 ? "text-green-400" : "text-red-400") : "text-slate-600")}>
+                        {cp5?.checked ? `${(cp5.excess_vs_spy ?? 0) >= 0 ? "+" : ""}${(cp5.excess_vs_spy ?? 0).toFixed(1)}%` : "..."}
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono-data text-xs", cp10?.checked ? ((cp10.excess_vs_spy ?? 0) >= 0 ? "text-green-400" : "text-red-400") : "text-slate-600")}>
+                        {cp10?.checked ? `${(cp10.excess_vs_spy ?? 0) >= 0 ? "+" : ""}${(cp10.excess_vs_spy ?? 0).toFixed(1)}%` : "..."}
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono-data text-xs", cp20?.checked ? ((cp20.excess_vs_spy ?? 0) >= 0 ? "text-green-400" : "text-red-400") : "text-slate-600")}>
+                        {cp20?.checked ? `${(cp20.excess_vs_spy ?? 0) >= 0 ? "+" : ""}${(cp20.excess_vs_spy ?? 0).toFixed(1)}%` : "..."}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </div>
       )}
     </div>

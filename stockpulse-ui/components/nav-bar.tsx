@@ -23,7 +23,12 @@ export function NavBar() {
   const { data: alerts } = usePolling<Alert[]>(api.alerts, 30000);
   const { data: scanStatus } = usePolling<ScanStatus>(api.scanStatus, 5000);
   const [bellOpen, setBellOpen] = useState(false);
-  const [clearedAt, setClearedAt] = useState<string | null>(null);
+  const [clearedAt, setClearedAt] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("stockpulse_alerts_cleared_at");
+    }
+    return null;
+  });
 
   const allAlerts = alerts ?? [];
   const visibleAlerts = clearedAt
@@ -98,7 +103,12 @@ export function NavBar() {
                   <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-200">Notifications</span>
                     <button
-                      onClick={() => { setBellOpen(false); setClearedAt(new Date().toISOString()); }}
+                      onClick={() => {
+                        const now = new Date().toISOString();
+                        setBellOpen(false);
+                        setClearedAt(now);
+                        localStorage.setItem("stockpulse_alerts_cleared_at", now);
+                      }}
                       className="text-xs text-blue-400 hover:text-blue-300"
                     >
                       Clear all
