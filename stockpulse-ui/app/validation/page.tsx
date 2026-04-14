@@ -150,13 +150,13 @@ export default function ValidationPage() {
             </div>
             <div className="p-5">
               <p className="text-xs text-slate-400 mb-1">Avg Return</p>
-              <p className={cn("text-lg font-bold font-mono-data", data.stats.avg_return >= 0 ? "text-green-400" : "text-red-400")}>
-                {data.stats.avg_return >= 0 ? "+" : ""}{data.stats.avg_return.toFixed(2)}%
+              <p className={cn("text-lg font-bold font-mono-data", (data.stats.avg_return ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                {data.stats.avg_return != null ? `${data.stats.avg_return >= 0 ? "+" : ""}${data.stats.avg_return.toFixed(2)}%` : "--"}
               </p>
             </div>
             <div className="p-5">
               <p className="text-xs text-slate-400 mb-1">Hit Rate</p>
-              <p className="text-lg font-bold font-mono-data text-slate-200">{data.stats.hit_rate.toFixed(0)}%</p>
+              <p className="text-lg font-bold font-mono-data text-slate-200">{data.stats.hit_rate != null ? `${data.stats.hit_rate.toFixed(0)}%` : "--"}</p>
             </div>
           </div>
         </div>
@@ -181,12 +181,12 @@ export default function ValidationPage() {
               {data.test_results.map((test) => (
                 <TableRow key={test.test} className="border-slate-700/30 hover:bg-slate-800/30">
                   <TableCell className="text-sm">{test.test}</TableCell>
-                  <TableCell className="font-mono-data text-right text-xs">{test.statistic.toFixed(4)}</TableCell>
+                  <TableCell className="font-mono-data text-right text-xs">{test.statistic != null ? test.statistic.toFixed(4) : "--"}</TableCell>
                   <TableCell className={cn(
                     "font-mono-data text-right text-xs",
-                    test.p_value < 0.05 ? "text-green-400" : "text-slate-400"
+                    (test.p_value ?? 1) < 0.05 ? "text-green-400" : "text-slate-400"
                   )}>
-                    {test.p_value.toFixed(4)}
+                    {test.p_value != null ? test.p_value.toFixed(4) : "--"}
                   </TableCell>
                   <TableCell>
                     {test.significant ? (
@@ -229,7 +229,7 @@ export default function ValidationPage() {
                 <TableRow key={`${sig.ticker}-${i}`} className="border-slate-700/30 hover:bg-slate-800/30">
                   <TableCell className="font-semibold">{sig.ticker}</TableCell>
                   <TableCell className="text-xs">{sig.action}</TableCell>
-                  <TableCell className="font-mono-data text-right text-xs">{sig.score.toFixed(1)}</TableCell>
+                  <TableCell className="font-mono-data text-right text-xs">{sig.score != null ? sig.score.toFixed(1) : "--"}</TableCell>
                   <TableCell className={cn(
                     "font-mono-data text-right text-xs",
                     sig.return_pct !== null

@@ -64,13 +64,13 @@ export default function PortfolioPage() {
         <div className="glass-card p-5">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Invested</p>
           <p className="text-2xl font-bold font-mono-data text-slate-200">
-            ${data.total_invested.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            ${(data.total_invested ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
         </div>
         <div className="glass-card p-5">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Current Value</p>
           <p className="text-2xl font-bold font-mono-data text-slate-200">
-            ${data.total_current.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            ${(data.total_current ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
         </div>
         <div className="glass-card p-5">
@@ -85,7 +85,7 @@ export default function PortfolioPage() {
         <div className="glass-card p-5">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Drawdown</p>
           <p className={cn("text-2xl font-bold font-mono-data", drawdownPct > 5 ? "text-red-400" : "text-slate-300")}>
-            {drawdownPct.toFixed(1)}%
+            {(drawdownPct ?? 0).toFixed(1)}%
           </p>
         </div>
       </div>
@@ -113,10 +113,10 @@ export default function PortfolioPage() {
                 <TableCell className="font-semibold">{pos.ticker}</TableCell>
                 <TableCell className="font-mono-data text-right text-xs">{pos.shares}</TableCell>
                 <TableCell className="font-mono-data text-right text-xs">
-                  ${pos.entry_price.toFixed(2)}
+                  {pos.entry_price != null ? `$${pos.entry_price.toFixed(2)}` : "--"}
                 </TableCell>
                 <TableCell className="font-mono-data text-right text-xs">
-                  ${pos.current_price.toFixed(2)}
+                  {pos.current_price != null ? `$${pos.current_price.toFixed(2)}` : "--"}
                 </TableCell>
                 <TableCell className={cn("font-mono-data text-right text-xs", pos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
                   {formatPct(pos.pnl_pct)}
@@ -145,7 +145,7 @@ export default function PortfolioPage() {
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-slate-400">
               <span>0%</span>
-              <span className="font-mono-data">{drawdownPct.toFixed(1)}%</span>
+              <span className="font-mono-data">{(drawdownPct ?? 0).toFixed(1)}%</span>
               <span>20%</span>
             </div>
             <Progress
@@ -157,7 +157,7 @@ export default function PortfolioPage() {
             <p className="text-xs text-orange-400 font-medium">New buys paused due to high drawdown</p>
           )}
           <p className="text-xs text-slate-500">
-            Size multiplier: <span className="font-mono-data">{data.drawdown.size_multiplier.toFixed(2)}x</span>
+            Size multiplier: <span className="font-mono-data">{data.drawdown?.size_multiplier != null ? `${data.drawdown.size_multiplier.toFixed(2)}x` : "--"}</span>
           </p>
         </div>
       )}

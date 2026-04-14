@@ -201,7 +201,7 @@ export default function WatchlistPage() {
 }
 
 function SignalDetail({ rec }: { rec: Recommendation }) {
-  const signals = Object.entries(rec.signals);
+  const signals = Object.entries(rec.signals ?? {});
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-300">{rec.thesis}</p>
@@ -213,12 +213,12 @@ function SignalDetail({ rec }: { rec: Recommendation }) {
               <div
                 className={cn(
                   "h-full rounded-full",
-                  sig.score >= 0 ? "score-bar-positive" : "score-bar-negative"
+                  (sig.score ?? 0) >= 0 ? "score-bar-positive" : "score-bar-negative"
                 )}
-                style={{ width: `${Math.min(Math.abs(sig.score) * 10, 100)}%` }}
+                style={{ width: `${Math.min(Math.abs(sig.score ?? 0) * 10, 100)}%` }}
               />
             </div>
-            <span className="font-mono-data text-slate-300 w-8 text-right">{formatScore(sig.score)}</span>
+            <span className="font-mono-data text-slate-300 w-8 text-right">{formatScore(sig.score ?? 0)}</span>
           </div>
         ))}
       </div>

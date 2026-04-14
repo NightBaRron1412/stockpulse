@@ -91,7 +91,7 @@ export default function SettingsPage() {
   const watchlist = config?.watchlist ?? [];
   const weights = config?.strategy?.weights ?? {};
   const thresholds = config?.strategy?.thresholds ?? {};
-  const maxWeight = Math.max(...Object.values(weights), 1);
+  const maxWeight = Math.max(...Object.values(weights).map((w) => w ?? 0), 1);
 
   return (
     <div className="space-y-6">
@@ -153,10 +153,10 @@ export default function SettingsPage() {
                   <div className="flex-1 h-2 bg-slate-700/30 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
-                      style={{ width: `${(weight / maxWeight) * 100}%` }}
+                      style={{ width: `${((weight ?? 0) / maxWeight) * 100}%` }}
                     />
                   </div>
-                  <span className="font-mono-data text-xs text-slate-300 w-10 text-right">{weight.toFixed(2)}</span>
+                  <span className="font-mono-data text-xs text-slate-300 w-10 text-right">{weight != null ? weight.toFixed(2) : "--"}</span>
                 </div>
               ))}
           </div>

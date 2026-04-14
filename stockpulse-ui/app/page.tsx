@@ -17,15 +17,15 @@ import type { Recommendation, Activity, Portfolio } from "@/lib/types";
 
 interface DashboardData {
   top_signals: Recommendation[];
-  portfolio_summary: Portfolio | null;
-  active_signals: number;
-  model_phase: string;
-  scan_status: string;
+  portfolio: Portfolio;
+  signal_count: Record<string, number>;
+  scan_status: { running: boolean; progress: string; last_completed: string; next_scheduled: string };
+  activity: Activity[];
+  total_scanned: number;
 }
 
 export default function DashboardPage() {
   const { data, loading, error } = usePolling<DashboardData>(api.dashboard, 30000);
-  const { data: activity } = usePolling<Activity[]>(api.activity, 30000);
 
   if (loading) {
     return (
@@ -52,9 +52,11 @@ export default function DashboardPage() {
     );
   }
 
-  const portfolio = data?.portfolio_summary;
+  const portfolio = data?.portfolio;
   const topSignals = data?.top_signals ?? [];
-  const events = activity ?? [];
+  const events = data?.activity ?? [];
+  const signalCount = data?.signal_count ?? {};
+  const scanStatus = data?.scan_status;
 
   return (
     <div className="space-y-6">
@@ -81,20 +83,24 @@ export default function DashboardPage() {
         <div className="glass-card p-5">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Active Signals</p>
           <p className="text-2xl font-bold font-mono-data text-blue-400">
-            {data?.active_signals ?? 0}
+            {signalCount.WATCHLIST ?? 0} <span className="text-sm text-slate-500">WATCHLIST</span>
+          </p>
+          <p className="text-xs text-slate-500 font-mono-data">
+            {signalCount.BUY ?? 0} BUY · {signalCount.CAUTION ?? 0} CAUTION
           </p>
         </div>
         <div className="glass-card p-5">
-          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Model Phase</p>
-          <p className="text-2xl font-bold text-violet-400">
-            {data?.model_phase ?? "PILOT"}
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Scanned</p>
+          <p className="text-2xl font-bold text-violet-400 font-mono-data">
+            {data?.total_scanned ?? 0}
           </p>
         </div>
         <div className="glass-card p-5">
-          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Scan Status</p>
-          <p className="text-2xl font-bold text-slate-300">
-            {data?.scan_status ?? "Idle"}
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Last Scan</p>
+          <p className="text-lg font-bold text-slate-300 font-mono-data">
+            {scanStatus?.last_completed ?? "Never"}
           </p>
+          <p className="text-xs text-slate-500">Next: {scanStatus?.next_scheduled ?? "--"}</p>
         </div>
       </div>
 
@@ -177,7 +183,7 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-200 leading-snug">{evt.message}</p>
                         <p className="text-[11px] text-slate-500 mt-0.5 font-mono-data">
-                          {new Date(evt.timestamp).toLocaleString()}
+                          {evt.timestamp ? (() => { try { return new Date(evt.timestamp).toLocaleString(); } catch { return evt.timestamp; } })() : "--"}
                         </p>
                       </div>
                     </div>

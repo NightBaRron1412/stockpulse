@@ -80,14 +80,14 @@ export default function SignalsPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">{data.thesis}</p>
+                <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">{data.thesis ?? ""}</p>
               </div>
               <div className="text-right">
                 <p className="text-4xl font-bold font-mono-data text-slate-100">
-                  {formatScore(data.composite_score)}
+                  {formatScore(data.composite_score ?? 0)}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">Composite Score</p>
-                <p className="text-sm font-mono-data text-slate-300 mt-1">{data.confidence}% confidence</p>
+                <p className="text-sm font-mono-data text-slate-300 mt-1">{data.confidence ?? "--"}% confidence</p>
               </div>
             </div>
           </div>
@@ -96,10 +96,10 @@ export default function SignalsPage() {
           <div className="glass-card p-6">
             <h3 className="text-sm font-semibold text-slate-300 mb-4">Signal Breakdown</h3>
             <div className="space-y-2">
-              {Object.entries(data.signals)
-                .sort(([, a], [, b]) => Math.abs(b.score * b.weight) - Math.abs(a.score * a.weight))
+              {Object.entries(data.signals ?? {})
+                .sort(([, a], [, b]) => Math.abs((b.score ?? 0) * (b.weight ?? 0)) - Math.abs((a.score ?? 0) * (a.weight ?? 0)))
                 .map(([name, sig]) => {
-                  const weighted = sig.score * sig.weight;
+                  const weighted = (sig.score ?? 0) * (sig.weight ?? 0);
                   const maxBar = 5; // scale reference
                   const pct = Math.min(Math.abs(weighted) / maxBar, 1) * 100;
                   const isPositive = weighted >= 0;
@@ -137,7 +137,7 @@ export default function SignalsPage() {
 
           {/* Confirmation buckets */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {Object.entries(data.confirmation.buckets).map(([name, bucket]) => (
+            {Object.entries(data.confirmation?.buckets ?? {}).map(([name, bucket]) => (
               <div key={name} className="glass-card p-5">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-semibold capitalize text-slate-300">{name}</h4>
