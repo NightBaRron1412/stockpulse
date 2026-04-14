@@ -130,7 +130,7 @@ export default function WatchlistPage() {
       </div>
 
       {/* Table */}
-      <div className="glass-card p-0 overflow-y-auto" style={{ maxHeight: "calc(100vh - 140px)" }}>
+      <div className="glass-card p-0 overflow-hidden">
         {items.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             {data?.length === 0
