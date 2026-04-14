@@ -123,7 +123,6 @@ export default function DashboardPage() {
                   <TableHead className="text-slate-400 text-xs">Ticker</TableHead>
                   <TableHead className="text-slate-400 text-xs">Action</TableHead>
                   <TableHead className="text-slate-400 text-xs">Score</TableHead>
-                  <TableHead className="text-slate-400 text-xs">Conf.</TableHead>
                   <TableHead className="text-slate-400 text-xs">Thesis</TableHead>
                 </TableRow>
               </TableHeader>
@@ -155,7 +154,6 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono-data text-xs">{sig.confidence}%</TableCell>
                     <TableCell className="text-xs text-slate-400 max-w-[200px] truncate">
                       {sig.thesis}
                     </TableCell>

@@ -169,7 +169,6 @@ export default function WatchlistPage() {
                   <SortableHead label="Ticker" sortKey="ticker" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortableHead label="Action" sortKey="action" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortableHead label="Score" sortKey="composite_score" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortableHead label="Confidence" sortKey="confidence" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
                   <TableHead className="text-slate-400 text-xs">Thesis</TableHead>
                   <TableHead className="text-slate-400 text-xs">Source</TableHead>
                   <TableHead className="text-slate-400 text-xs w-10"></TableHead>
@@ -218,7 +217,6 @@ export default function WatchlistPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono-data text-xs">{rec.confidence}%</TableCell>
                       <TableCell className="text-xs text-slate-400 max-w-[250px] truncate">
                         {rec.thesis}
                       </TableCell>
@@ -240,7 +238,7 @@ export default function WatchlistPage() {
                     </TableRow>
                     {expandedTicker === rec.ticker && (
                       <TableRow key={`${rec.ticker}-detail`} className="border-slate-700/30 bg-slate-800/20">
-                        <TableCell colSpan={7} className="p-4">
+                        <TableCell colSpan={6} className="p-4">
                           <SignalDetail rec={rec} />
                         </TableCell>
                       </TableRow>
