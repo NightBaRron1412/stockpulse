@@ -74,6 +74,13 @@ def run_scheduler():
         id="signal_tracking",
         name="Signal Performance Check",
     )
+    from stockpulse.scheduler.jobs import weekly_digest_job
+    scheduler.add_job(
+        weekly_digest_job,
+        CronTrigger(hour="18", minute="0", day_of_week="sun", timezone=tz),
+        id="weekly_digest",
+        name="Weekly Digest",
+    )
     logging.info("StockPulse scheduler started with %d jobs:", len(scheduler.get_jobs()))
     for job in scheduler.get_jobs():
         logging.info("  - %s: %s", job.name, job.trigger)
@@ -85,11 +92,13 @@ def run_scheduler():
 
 def main():
     parser = argparse.ArgumentParser(description="StockPulse -- Stock Research & Alert System")
-    parser.add_argument("mode", choices=["scan", "schedule", "backtest", "performance"],
-        help="scan: one-shot scan | schedule: start scheduler | backtest: run backtest | performance: signal performance report")
+    parser.add_argument("mode", choices=["scan", "schedule", "backtest", "performance", "enter"],
+        help="scan: one-shot scan | schedule: start scheduler | backtest: run backtest | performance: signal performance report | enter: enter a position")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument("--start", help="Backtest start date (YYYY-MM-DD)")
     parser.add_argument("--end", help="Backtest end date (YYYY-MM-DD)")
+    parser.add_argument("--ticker", help="Ticker for enter mode")
+    parser.add_argument("--shares", type=int, help="Number of shares (auto-computed if omitted)")
     args = parser.parse_args()
     setup_logging(args.log_level)
     if args.mode == "scan":
@@ -109,6 +118,27 @@ def main():
             p = summary["periods"].get(period_key, {})
             if p.get("reviewed", 0) > 0:
                 print(f"  {period_key}: hit_rate={p['hit_rate']}% avg_return={p['avg_return']:+.2f}% profit_factor={p['profit_factor']:.2f}")
+    elif args.mode == "enter":
+        if not args.ticker:
+            print("Error: --ticker required for enter mode")
+            sys.exit(1)
+        from stockpulse.portfolio.entry import enter_position
+        result = enter_position(args.ticker, args.shares)
+        if result["success"]:
+            pos = result["position"]
+            print(f"\nPosition entered:")
+            print(f"  {pos['ticker']}: {pos['shares']} shares at ${pos['entry_price']:.2f}")
+            print(f"  Total cost: ${result['total_cost']:,.2f}")
+            print(f"  Stop loss: ${result['stop_price']:.2f}")
+            rec = result.get("recommendation", {})
+            print(f"  Signal: {rec.get('action', '?')} (score: {rec.get('score', 0):+.1f})")
+            print(f"  Thesis: {rec.get('thesis', '')[:100]}")
+        else:
+            print(f"\nEntry failed: {result.get('error', 'unknown')}")
+        if result.get("warnings"):
+            print("\nWarnings:")
+            for w in result["warnings"]:
+                print(f"  - {w}")
 
 if __name__ == "__main__":
     main()

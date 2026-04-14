@@ -101,3 +101,14 @@ def signal_tracking_job():
             logger.info("Signal outcomes resolved: %s", results)
     except Exception:
         logger.exception("Signal tracking check failed")
+
+
+def weekly_digest_job():
+    """Generate and send weekly digest every Sunday."""
+    logger.info("=== WEEKLY DIGEST ===")
+    try:
+        from stockpulse.reports.weekly import generate_weekly_digest
+        path = generate_weekly_digest()
+        logger.info("Weekly digest complete: %s", path)
+    except Exception:
+        logger.exception("Weekly digest failed")
