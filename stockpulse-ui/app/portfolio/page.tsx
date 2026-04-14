@@ -13,9 +13,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Portfolio } from "@/lib/types";
+import { useState } from "react";
 
 export default function PortfolioPage() {
   const { data, loading, error } = usePolling<Portfolio>(api.portfolio, 30000);
+  const [sortKey, setSortKey] = useState<string>("pnl_pct");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
 
   if (loading) {
     return (
@@ -91,24 +103,29 @@ export default function PortfolioPage() {
       </div>
 
       {/* Positions table */}
-      <div className="glass-card p-0 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-700/50">
+      <div className="rounded-xl border border-slate-700/50 bg-slate-900/60 px-4">
+        <div className="px-1 py-4 border-b border-slate-700/50">
           <h2 className="text-sm font-semibold text-slate-300">Positions</h2>
         </div>
         <Table>
           <TableHeader>
             <TableRow className="border-slate-700/50 hover:bg-transparent">
-              <TableHead className="text-slate-400 text-xs">Ticker</TableHead>
-              <TableHead className="text-slate-400 text-xs text-right">Shares</TableHead>
-              <TableHead className="text-slate-400 text-xs text-right">Entry</TableHead>
-              <TableHead className="text-slate-400 text-xs text-right">Current</TableHead>
-              <TableHead className="text-slate-400 text-xs text-right">P&L %</TableHead>
-              <TableHead className="text-slate-400 text-xs text-right">P&L $</TableHead>
+              <SortHead label="Ticker" sortKey="ticker" current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortHead label="Shares" sortKey="shares" current={sortKey} dir={sortDir} onSort={handleSort} align="right" />
+              <SortHead label="Entry" sortKey="entry_price" current={sortKey} dir={sortDir} onSort={handleSort} align="right" />
+              <SortHead label="Current" sortKey="current_price" current={sortKey} dir={sortDir} onSort={handleSort} align="right" />
+              <SortHead label="P&L %" sortKey="pnl_pct" current={sortKey} dir={sortDir} onSort={handleSort} align="right" />
+              <SortHead label="P&L $" sortKey="pnl" current={sortKey} dir={sortDir} onSort={handleSort} align="right" />
               <TableHead className="text-slate-400 text-xs">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.positions.map((pos) => (
+            {[...data.positions].sort((a: any, b: any) => {
+              const av = a[sortKey] ?? 0;
+              const bv = b[sortKey] ?? 0;
+              if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+              return sortDir === "asc" ? av - bv : bv - av;
+            }).map((pos) => (
               <TableRow key={pos.ticker} className="border-slate-700/30 hover:bg-slate-800/30">
                 <TableCell className="font-semibold">{pos.ticker}</TableCell>
                 <TableCell className="font-mono-data text-right text-xs">{pos.shares}</TableCell>
@@ -162,5 +179,21 @@ export default function PortfolioPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function SortHead({ label, sortKey, current, dir, onSort, align = "left" }: {
+  label: string; sortKey: string; current: string; dir: "asc" | "desc"; onSort: (key: string) => void; align?: "left" | "right";
+}) {
+  const active = current === sortKey;
+  return (
+    <TableHead className={cn("text-slate-400 text-xs", align === "right" && "text-right")}>
+      <button onClick={() => onSort(sortKey)} className={cn("flex items-center gap-1 hover:text-slate-200 transition-colors", align === "right" && "ml-auto")}>
+        {label}
+        <span className={cn("text-[10px]", active ? "text-blue-400" : "text-slate-600")}>
+          {active ? (dir === "desc" ? "▼" : "▲") : "⇅"}
+        </span>
+      </button>
+    </TableHead>
   );
 }
