@@ -15,3 +15,5 @@ dist/
 build/
 stockpulse-ui/.next/
 stockpulse-ui/node_modules/
+stockpulse/config/portfolio.yaml
+.superpowers/

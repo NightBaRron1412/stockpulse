@@ -1,0 +1,10 @@
+positions:
+  # Add your positions here
+  # - ticker: AAPL
+  #   shares: 10
+  #   entry_price: 150.00
+  #   entry_date: "2025-01-01"
+
+alerts:
+  pnl_milestones: [5, 10, 15, 25, 50]
+  check_invalidation: true
