@@ -1,6 +1,11 @@
 """Signal aggregator -- computes all signals for a ticker."""
+import json
 import logging
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
+
 from stockpulse.config.settings import load_strategies
 from stockpulse.signals.technical import (
     calc_rsi_signal, calc_macd_signal, calc_ma_signal,
@@ -90,3 +95,76 @@ def compute_all_signals(ticker: str, df: pd.DataFrame) -> dict:
         signals["relative_strength"] = {"score": 0.0, "weight": 0.0, "value": None}
 
     return signals
+
+
+# ---------------------------------------------------------------------------
+# Score history tracking (persisted in outputs/.score_history.json)
+# ---------------------------------------------------------------------------
+
+_SCORE_HISTORY_FILE = (
+    Path(__file__).resolve().parent.parent.parent / "outputs" / ".score_history.json"
+)
+
+
+def _load_score_history() -> dict:
+    if _SCORE_HISTORY_FILE.exists():
+        try:
+            with open(_SCORE_HISTORY_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_score_history(history: dict) -> None:
+    _SCORE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_SCORE_HISTORY_FILE, "w") as f:
+        json.dump(history, f)
+
+
+def compute_score_acceleration(
+    ticker: str, current_score: float, confirmation: dict
+) -> float:
+    """Compute score acceleration bonus per expert.
+
+    Expert says: use as modifier (max +8 points), not core signal.
+    Requires score >= 35 AND breadth >= 2 AND persist >= 2.
+    """
+    history = _load_score_history()
+    ticker_hist = history.get(ticker, [])
+
+    # Record current score
+    ticker_hist.append(
+        {"date": datetime.now().isoformat()[:10], "score": current_score}
+    )
+    # Keep last 10 scans
+    ticker_hist = ticker_hist[-10:]
+    history[ticker] = ticker_hist
+    _save_score_history(history)
+
+    if len(ticker_hist) < 3:
+        return 0.0
+
+    score_t = current_score
+    score_t1 = ticker_hist[-2]["score"]
+    score_t3 = (
+        ticker_hist[-4]["score"]
+        if len(ticker_hist) >= 4
+        else ticker_hist[-3]["score"]
+    )
+
+    vel1 = score_t - score_t1
+    vel3 = score_t - score_t3
+
+    # Count how many buckets improved (simplified: use confirming_count)
+    breadth = confirmation.get("confirming_count", 0)
+
+    # Persist: how many of last 3 scans had score >= 35
+    persist = sum(1 for h in ticker_hist[-3:] if h["score"] >= 35)
+
+    accel_bonus = 0.0
+    if score_t >= 35 and breadth >= 2 and persist >= 2:
+        accel_bonus = min(0.25 * vel1 + 0.15 * vel3, 8.0)
+        accel_bonus = max(accel_bonus, 0.0)  # no negative bonus
+
+    return accel_bonus

@@ -58,3 +58,9 @@ def test_relative_strength_returns_bounded_score():
     df = _make_price_df(n=100)
     score = calc_relative_strength("TEST", df)
     assert -100 <= score <= 100
+
+
+def test_pead_returns_bounded_score():
+    from stockpulse.signals.pead import calc_pead_score
+    score = calc_pead_score("AAPL")
+    assert -100 <= score <= 100
