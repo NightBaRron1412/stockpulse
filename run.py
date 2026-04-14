@@ -41,7 +41,7 @@ def run_scheduler():
     sched_cfg = strat.get("scheduling", {})
     tz = sched_cfg.get("timezone", "US/Eastern")
     scheduler = BlockingScheduler(timezone=tz)
-    morning_time = sched_cfg.get("morning_scan", "09:00")
+    morning_time = sched_cfg.get("morning_scan", "09:35")
     h, m = morning_time.split(":")
     scheduler.add_job(morning_scan_job, CronTrigger(hour=int(h), minute=int(m), day_of_week="mon-fri", timezone=tz),
         id="morning_scan", name="Morning Full Scan")

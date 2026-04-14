@@ -21,7 +21,7 @@ Local, self-hosted stock research and alert system. Scans the S&P 500 daily, gen
 
 ```bash
 # Clone the repo
-git clone https://github.com/amirshetaia/stockpulse.git
+git clone https://github.com/NightBaRron1412/stockpulse.git
 cd stockpulse
 
 # One-command setup
@@ -92,20 +92,22 @@ Edit `stockpulse/config/strategies.yaml` to adjust signal weights, thresholds, a
 ## How It Works
 
 ```
-9:00 AM   Full S&P 500 scan (503+ tickers)
+9:35 AM   Full S&P 500 scan (503+ tickers, ~35 min)
           ├─ 11 signals: RSI, MACD, MA, Volume, Breakout, Gap, ADX,
           │              Relative Strength, SEC Filings, News, PEAD
           ├─ Weighted composite score → BUY/WATCHLIST/HOLD/CAUTION/SELL
           ├─ Confirmation: 2 of 3 buckets (trend, participation, catalyst)
           ├─ Risk check: sector caps, clustering, drawdown, earnings blackout
+          ├─ Auto-discover new tickers crossing WATCHLIST threshold
           └─ Alerts → Telegram/Discord + markdown report
 
-9:30-4:00 Intraday checks every 30 min (watchlist only)
-          ├─ Detect action changes (HOLD → BUY)
+9:30-4:00 Intraday checks every 30 min (watchlist + discovered tickers)
+          ├─ Detect action changes (HOLD → WATCHLIST, etc.)
           └─ Portfolio P&L monitoring + milestone alerts
 
+Every 2h  SEC filing scan (8-K, Form 4 on watchlist tickers)
 4:30 PM   EOD recap report
-5:00 PM   Signal performance checkpoint (tracks 5/10/20-day returns)
+5:00 PM   Signal performance checkpoint (tracks 5/10/20-day returns vs SPY)
 Sunday    Weekly digest with AI outlook
 ```
 
@@ -120,7 +122,7 @@ Sunday    Weekly digest with AI outlook
 
 ### Limitations
 
-- Finnhub free tier: 60 calls/min (full scan takes ~9 min)
+- Finnhub free tier: 60 calls/min (full scan takes ~35 min)
 - No real-time streaming
 - No analyst ratings (paywalled)
 - Insider role-weighting limited by EdgarTools metadata
