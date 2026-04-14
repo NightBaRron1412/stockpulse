@@ -16,8 +16,21 @@ function SignalsContent() {
   const savedTicker = typeof window !== "undefined" ? sessionStorage.getItem("stockpulse_last_signal") ?? "" : "";
   const initialTicker = paramTicker || savedTicker;
 
+  // Try to restore cached result
+  const cachedResult = (() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const cached = sessionStorage.getItem("stockpulse_signal_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.ticker === initialTicker.toUpperCase()) return parsed;
+      }
+    } catch {}
+    return null;
+  })();
+
   const [ticker, setTicker] = useState(initialTicker);
-  const [data, setData] = useState<Recommendation | null>(null);
+  const [data, setData] = useState<Recommendation | null>(cachedResult);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +43,7 @@ function SignalsContent() {
       const result = await api.analyze(t);
       setData(result);
       sessionStorage.setItem("stockpulse_last_signal", t);
+      sessionStorage.setItem("stockpulse_signal_cache", JSON.stringify(result));
       router.replace(`/signals?ticker=${t}`, { scroll: false });
     } catch (e: any) {
       setError(e.message || "Analysis failed");
@@ -44,6 +58,7 @@ function SignalsContent() {
     if (t) runAnalysis(t);
   }, [ticker, runAnalysis]);
 
+  // Only fetch if we have a ticker but no cached data
   useEffect(() => {
     if (initialTicker && !data) {
       runAnalysis(initialTicker.trim().toUpperCase());
