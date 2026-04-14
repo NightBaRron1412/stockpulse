@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
-from stockpulse.config.settings import get_config
+from stockpulse.config.settings import get_config, load_strategies
 from stockpulse.data.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
@@ -145,21 +145,47 @@ def _parse_8k_items(description: str) -> list[str]:
 
 
 def score_filings(ticker: str, lookback_days: int = 30) -> float:
-    """Score recent filings using expert's importance map + LLM direction."""
+    """Score filings with expert caps: unparsed SEC capped at +25,
+    half-life decay, log1p diminishing returns for filing count."""
+    cfg_sec = load_strategies().get("signals", {}).get("sec_filing", {})
+    raw_cap = cfg_sec.get("raw_cap_without_direction", 25)
+    half_lives = cfg_sec.get("half_life_days", {"8k": 3, "10k_10q": 2, "form4_purchase": 10})
+
     filings = get_recent_filings(ticker, lookback_days)
     if not filings:
         return 0.0
 
+    import math
+
     score = 0.0
+    filing_count = 0
+
     for filing in filings:
         importance = filing["importance"]
         form = filing["form"]
+        days_ago = 0
+        try:
+            from datetime import datetime
+            filed = datetime.strptime(filing["date"], "%Y-%m-%d").date()
+            days_ago = (datetime.now().date() - filed).days
+        except Exception:
+            days_ago = 15
+
+        # Half-life decay
+        if form in ("8-K", "8-K/A"):
+            hl = half_lives.get("8k", 3)
+        elif form in ("10-K", "10-K/A", "10-Q", "10-Q/A"):
+            hl = half_lives.get("10k_10q", 2)
+        else:
+            hl = 5
+
+        decay = 0.5 ** (days_ago / max(hl, 1))
 
         if filing["is_negative"]:
-            score -= importance * 60
+            score -= importance * 60 * decay
             continue
 
-        # For 8-K filings, try to get LLM direction
+        # LLM directional parsing for important 8-Ks
         if form in ("8-K", "8-K/A") and importance >= 0.50:
             try:
                 from stockpulse.llm.filing_analyzer import analyze_filing_direction
@@ -167,18 +193,28 @@ def score_filings(ticker: str, lookback_days: int = 30) -> float:
                     ticker, form, filing.get("items", []), filing.get("description", "")
                 )
                 if direction["direction"] == "bullish":
-                    score += importance * 35 * (0.5 + direction["confidence"] * 0.5)
+                    contribution = importance * 35 * (0.5 + direction["confidence"] * 0.5) * decay
+                    score += contribution
                 elif direction["direction"] == "bearish":
-                    score -= importance * 35 * (0.5 + direction["confidence"] * 0.5)
+                    score -= importance * 35 * (0.5 + direction["confidence"] * 0.5) * decay
                 else:
-                    score += importance * 10  # neutral filing still has information value
+                    score += min(importance * 10 * decay, raw_cap)
             except Exception:
-                score += importance * 15  # fallback: assume mild positive
-        elif form in ("10-K", "10-K/A", "10-Q", "10-Q/A"):
-            score += importance * 10
+                score += min(importance * 10 * decay, raw_cap)
         elif "13D" in form or "13G" in form:
-            score += importance * 25
+            score += importance * 25 * decay
         else:
-            score += importance * 15
+            # Routine filings — cap contribution
+            score += min(importance * 10 * decay, raw_cap * 0.5)
+
+        filing_count += 1
+
+    # Diminishing returns: log1p scaling for count
+    if filing_count > 1:
+        count_factor = math.log1p(filing_count) / math.log1p(1)  # normalize so 1 filing = 1.0x
+        score = score / max(count_factor, 1.0)
+
+    # Cap total score if no directional parsing was used
+    score = max(-100.0, min(score, raw_cap if score > 0 else 100.0))
 
     return max(-100.0, min(100.0, score))

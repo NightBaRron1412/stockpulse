@@ -14,10 +14,9 @@ def _get_signal_config(name: str) -> dict:
     return strat.get("signals", {}).get(name, {})
 
 def calc_rsi_signal(df: pd.DataFrame) -> float:
-    """RSI signal -- trend-aware zones per expert:
-    In uptrends (price > 50 SMA), RSI 40-50 = buyable pullback.
-    Overbought >70 is NOT automatic sell in uptrends.
-    For mean-reversion: 20/80 extremes only."""
+    """RSI signal with expert-calibrated granular zones.
+    In uptrends: 70-75 is only -5, not -15. RSI 50-70 is neutral.
+    In downtrends: 35-55 is neutral, 55-65 is mild -5."""
     cfg = _get_signal_config("rsi")
     period = cfg.get("period", 14)
     rsi = ta.rsi(df["Close"], length=period)
@@ -32,33 +31,35 @@ def calc_rsi_signal(df: pd.DataFrame) -> float:
         in_uptrend = float(df["Close"].iloc[-1]) > float(sma50.iloc[-1])
 
     if in_uptrend:
-        # In uptrend: pullback to 40-50 is bullish entry zone
+        zones = cfg.get("uptrend_zones", {})
         if current_rsi <= 20:
             return 80.0
-        elif current_rsi <= 40:
-            return 50.0
-        elif current_rsi <= 50:
-            return 30.0   # pullback zone -- still buyable
-        elif current_rsi <= 70:
-            return 0.0    # normal range in uptrend
-        elif current_rsi <= 80:
-            return -15.0  # mildly stretched but NOT sell in uptrend
-        else:
-            return -40.0  # extreme overbought even in uptrend
-    else:
-        # In downtrend: standard zones
-        if current_rsi <= 20:
-            return 60.0   # deeply oversold -- potential reversal
         elif current_rsi <= 30:
+            return 50.0
+        elif current_rsi <= 40:
             return 30.0
         elif current_rsi <= 50:
-            return 0.0
+            return float(zones.get("40_50", 20))
         elif current_rsi <= 70:
-            return -20.0
+            return float(zones.get("50_70", 0))
+        elif current_rsi <= 75:
+            return float(zones.get("70_75", -5))
         elif current_rsi <= 80:
-            return -50.0
+            return float(zones.get("75_80", -10))
         else:
-            return -80.0
+            return float(zones.get("gt_80", -20))
+    else:
+        zones = cfg.get("downtrend_zones", {})
+        if current_rsi <= 20:
+            return 60.0
+        elif current_rsi <= 35:
+            return float(zones.get("lt_35", 0))
+        elif current_rsi <= 55:
+            return float(zones.get("35_55", 0))
+        elif current_rsi <= 65:
+            return float(zones.get("55_65", -5))
+        else:
+            return float(zones.get("gt_65", -15))
 
 def calc_macd_signal(df: pd.DataFrame) -> float:
     cfg = _get_signal_config("macd")
@@ -85,13 +86,14 @@ def calc_macd_signal(df: pd.DataFrame) -> float:
     return _clamp(score)
 
 def calc_ma_signal(df: pd.DataFrame) -> float:
-    """Moving average signal using EMAs for tactical, SMA for regime.
-    20 EMA = tactical trend, 50 SMA = swing trend, 200 SMA = regime filter.
-    Expert says don't overweight golden/death crosses for 1-4 week horizon."""
+    """Moving average signal split into price-location (60%) and structure/alignment (40%).
+    Expert: price above 20/50 should count even if alignment is bearish."""
     cfg = _get_signal_config("moving_averages")
+    price_weight = cfg.get("price_vs_ma_weight", 0.60)
+    stack_weight = cfg.get("stack_slope_weight", 0.40)
+
     close = df["Close"]
     current_price = float(close.iloc[-1])
-    score = 0.0
 
     ema20 = ta.ema(close, length=20)
     sma50 = ta.sma(close, length=50)
@@ -99,42 +101,48 @@ def calc_ma_signal(df: pd.DataFrame) -> float:
 
     ema20_val = float(ema20.iloc[-1]) if ema20 is not None and not ema20.dropna().empty else None
     sma50_val = float(sma50.iloc[-1]) if sma50 is not None and not sma50.dropna().empty else None
-    sma200_val = float(sma200.iloc[-1]) if sma200 is not None and not sma200.dropna().empty else None
+    sma200_val = float(sma200.iloc[-1]) if sma200 is not None and len(sma200.dropna()) > 0 else None
 
-    # Price vs EMAs/SMAs
-    if ema20_val and current_price > ema20_val:
-        score += 20  # above tactical trend
-    elif ema20_val:
-        score -= 20
+    # Price location score (where is price vs MAs)
+    price_score = 0.0
+    if ema20_val:
+        price_score += 25 if current_price > ema20_val else -25
+    if sma50_val:
+        price_score += 25 if current_price > sma50_val else -25
+    if sma200_val:
+        price_score += 30 if current_price > sma200_val else -30
 
-    if sma50_val and current_price > sma50_val:
-        score += 20  # above swing trend
-    elif sma50_val:
-        score -= 20
-
-    # 200 SMA as regime filter (heavier weight)
-    if sma200_val and current_price > sma200_val:
-        score += 25  # bullish regime
-    elif sma200_val:
-        score -= 25  # bearish regime
-
-    # EMA/SMA alignment bonus (20 > 50 > 200 = fully aligned uptrend)
+    # Structure/alignment score (how are the MAs ordered)
+    stack_score = 0.0
     if ema20_val and sma50_val and sma200_val:
         if ema20_val > sma50_val > sma200_val:
-            score += 15  # fully aligned uptrend
+            stack_score = 80.0  # fully aligned bullish
         elif ema20_val < sma50_val < sma200_val:
-            score -= 15  # fully aligned downtrend
+            stack_score = -80.0  # fully aligned bearish
+        elif ema20_val > sma50_val:
+            stack_score = 20.0  # short-term bullish
+        elif ema20_val < sma50_val:
+            stack_score = -20.0  # short-term bearish
+    elif ema20_val and sma50_val:
+        # No 200 SMA data
+        if ema20_val > sma50_val:
+            stack_score = 30.0
+        else:
+            stack_score = -30.0
 
-    return _clamp(score)
+    # Weighted combination
+    combined = price_score * price_weight + stack_score * stack_weight
+    return _clamp(combined)
 
 def calc_volume_signal(df: pd.DataFrame) -> float:
-    """Volume signal using relative volume (RVOL).
-    RVOL >= 1.5 = confirmation. RVOL >= 2.0 = strong.
-    Direction matches price direction. Tracks distribution days."""
+    """Volume signal using RVOL with soft positive band per expert.
+    0.8-1.0 RVOL gets small positive if price closes well and trend intact."""
     cfg = _get_signal_config("volume")
     lookback = cfg.get("lookback", 20)
     rvol_confirm = cfg.get("rvol_confirm", 1.5)
     rvol_strong = cfg.get("rvol_strong", 2.0)
+    soft_band = cfg.get("soft_positive_band", [0.8, 1.0])
+    soft_score = cfg.get("soft_positive_score", 5)
 
     if len(df) < lookback + 1:
         return 0.0
@@ -148,7 +156,7 @@ def calc_volume_signal(df: pd.DataFrame) -> float:
     price_change = float(df["Close"].iloc[-1]) - float(df["Close"].iloc[-2])
     direction = 1.0 if price_change > 0 else -1.0
 
-    # Check for distribution days (down days on heavy volume = bearish)
+    # Distribution day check
     distribution_count = 0
     for i in range(-5, 0):
         if i >= -len(df):
@@ -162,12 +170,19 @@ def calc_volume_signal(df: pd.DataFrame) -> float:
         score = direction * 80.0
     elif rvol >= rvol_confirm:
         score = direction * 50.0
+    elif rvol >= 1.2:
+        score = direction * 20.0
     elif rvol >= 1.0:
         score = direction * 15.0
+    elif rvol >= soft_band[0]:
+        # Soft positive band: small positive if price direction is favorable
+        if direction > 0:
+            score = float(soft_score)
+        else:
+            score = 0.0
     elif rvol < 0.5:
-        score = direction * -10.0  # very low volume = contrarian hint
+        score = direction * -10.0
 
-    # Penalize for distribution pattern
     if distribution_count >= 3:
         score -= 20.0
 
@@ -243,27 +258,40 @@ def calc_breakout_signal(df: pd.DataFrame) -> float:
     return _clamp(score)
 
 def calc_gap_signal(df: pd.DataFrame) -> float:
-    """Gap signal: gap up/down from prior close.
-    Gaps <0.5% ignored. 0.5-1% mild. 1-2% moderate. >2% strong.
-    Capped so a normal 1-2% gap doesn't dominate the composite."""
+    """Gap signal normalized by ATR and excess vs sector.
+    Expert: don't overreact to macro-driven gaps on volatile names."""
     cfg = _get_signal_config("gap")
-    threshold_pct = cfg.get("threshold_pct", 0.5)
+    normalize_by_atr = cfg.get("normalize_by_atr", True)
+
     if len(df) < 2:
         return 0.0
     current_open = float(df["Open"].iloc[-1])
     prev_close = float(df["Close"].iloc[-2])
     if prev_close == 0:
         return 0.0
+
     gap_pct = ((current_open - prev_close) / prev_close) * 100
 
-    if abs(gap_pct) < 0.5:
-        return 0.0  # too small to matter
+    if abs(gap_pct) < 0.3:
+        return 0.0
 
-    # Graduated scoring with soft cap
-    # 0.5% gap = ~15 score, 1% = ~30, 2% = ~50, 3%+ = ~60-70 max
-    score = gap_pct * 25  # 1% = 25 points
-    # Soft cap at ±70 (a gap alone shouldn't be the entire signal)
-    return _clamp(score, -70.0, 70.0)
+    # Normalize by ATR% to avoid punishing volatile names
+    if normalize_by_atr:
+        atr = ta.atr(df["High"], df["Low"], df["Close"], length=14)
+        if atr is not None and not atr.dropna().empty:
+            atr_pct = (float(atr.iloc[-1]) / prev_close) * 100
+            if atr_pct > 0:
+                # Gap as fraction of ATR: a gap that's < 0.5 ATR is noise
+                gap_atr_ratio = abs(gap_pct) / atr_pct
+                if gap_atr_ratio < 0.3:
+                    return 0.0  # gap is noise relative to volatility
+                # Scale: 0.5 ATR gap = mild, 1.0 ATR = moderate, 2.0 ATR = strong
+                score = (gap_pct / atr_pct) * 25
+                return _clamp(score, -60.0, 60.0)
+
+    # Fallback: raw percentage scoring
+    score = gap_pct * 20
+    return _clamp(score, -60.0, 60.0)
 
 def calc_adx_signal(df: pd.DataFrame) -> float:
     """Trend strength signal using ADX and directional indicators.

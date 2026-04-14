@@ -14,10 +14,10 @@ def compute_composite_score(signals: dict) -> float:
     return max(-100.0, min(100.0, total / total_weight))
 
 def classify_action(composite_score: float) -> str:
-    """Classify composite score into BUY/WATCHLIST/HOLD/SELL."""
+    """Classify with relaxed WATCHLIST threshold per expert."""
     thresholds = load_strategies().get("thresholds", {})
     buy_threshold = thresholds.get("buy", 55)
-    watchlist_threshold = thresholds.get("watchlist", 35)
+    watchlist_threshold = thresholds.get("watchlist", 32)
     sell_threshold = thresholds.get("sell", -65)
 
     if composite_score >= buy_threshold:

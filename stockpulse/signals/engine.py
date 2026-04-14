@@ -50,6 +50,7 @@ def check_confirmation_buckets(signals: dict) -> dict:
     return {
         "confirming_count": confirming,
         "required": required,
+        "total_buckets": len(bucket_defs),
         "passes": confirming >= required,
         "buckets": detail,
     }

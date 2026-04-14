@@ -3,8 +3,18 @@ signals:
     period: 14
     oversold: 30
     overbought: 70
-    pullback_zone: [40, 50]  # in uptrends, RSI 40-50 = buyable pullback
     weight: 0.07
+    uptrend_zones:
+      40_50: 20
+      50_70: 0
+      70_75: -5
+      75_80: -10
+      gt_80: -20
+    downtrend_zones:
+      lt_35: 0
+      35_55: 0
+      55_65: -5
+      gt_65: -15
   macd:
     fast: 12
     slow: 26
@@ -15,11 +25,16 @@ signals:
     medium_sma: 50
     slow_sma: 200
     weight: 0.10
+    price_vs_ma_weight: 0.60
+    stack_slope_weight: 0.40
   volume:
     rvol_confirm: 1.5     # RVOL >= 1.5 = valid confirmation
     rvol_strong: 2.0      # RVOL >= 2.0 = strong catalyst
     lookback: 20
     weight: 0.14
+    soft_positive_band: [0.8, 1.0]
+    soft_positive_score: 5
+    participation_confirm_rvol: 1.2
   breakout:
     periods: [20, 55, 252]  # multi-timeframe breakouts
     require_volume: true
@@ -28,6 +43,8 @@ signals:
   gap:
     threshold_pct: 0.5
     weight: 0.04
+    normalize_by_atr: true
+    use_excess_vs_sector: true
   adx:
     period: 14
     trend_threshold: 20
@@ -39,6 +56,12 @@ signals:
     lookback_days: 30
     insider_buy_weight: 3  # insider buys scored 3x heavier than sells
     weight: 0.18
+    raw_cap_without_direction: 25
+    half_life_days:
+      8k: 3
+      10k_10q: 2
+      form4_purchase: 10
+    diminishing_returns: log1p
   news_sentiment:
     weight: 0.08           # LLM event classification per expert (5-10% range)
   relative_strength:
@@ -48,7 +71,8 @@ signals:
 
 thresholds:
   buy: 55
-  watchlist: 35
+  watchlist: 32
+  watchlist_relaxed: 30
   sell: -65
   exit: 15
   confidence_min: 55

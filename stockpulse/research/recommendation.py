@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from stockpulse.config.settings import load_portfolio
+from stockpulse.config.settings import load_portfolio, load_strategies
 from stockpulse.signals.engine import (
     compute_all_signals, check_confirmation_buckets, compute_score_acceleration,
 )
@@ -116,6 +116,19 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
     # Re-apply confirmation downgrade after PEAD/accel adjustments
     if action == "BUY" and not confirmation["passes"]:
         action = "WATCHLIST"
+
+    # Relaxed WATCHLIST: allow at threshold 30 if conditions met
+    if action == "HOLD":
+        relaxed_threshold = load_strategies().get("thresholds", {}).get("watchlist_relaxed", 30)
+        if composite >= relaxed_threshold:
+            # Check if trend bucket confirms AND (RS >= 60 OR breakout >= 15 OR participation confirms)
+            trend_confirms = confirmation.get("buckets", {}).get("trend", {}).get("confirms", False)
+            rs_score = signals.get("relative_strength", {}).get("score", 0)
+            breakout_score = signals.get("breakout", {}).get("score", 0)
+            participation_confirms = confirmation.get("buckets", {}).get("participation", {}).get("confirms", False)
+
+            if trend_confirms and (rs_score >= 60 or breakout_score >= 15 or participation_confirms):
+                action = "WATCHLIST"
 
     # ---- WATCHLIST -> BUY auto-upgrade per expert ----
     if action == "WATCHLIST" and composite >= 50:
