@@ -63,6 +63,15 @@ install-service: ## Install as a systemd user service (auto-start on boot)
 	@loginctl enable-linger $$(whoami) 2>/dev/null || true
 	@echo "Service installed. Run 'make start' or 'systemctl --user start stockpulse'"
 
+api: ## Start the FastAPI backend on port 8000
+	@$(PYTHON) -m uvicorn stockpulse.api.server:app --host 0.0.0.0 --port 8000 --reload
+
+ui: ## Start both backend and frontend
+	@echo "Starting FastAPI on :8000..."
+	@$(PYTHON) -m uvicorn stockpulse.api.server:app --host 0.0.0.0 --port 8000 &
+	@echo "Starting Next.js on :3000..."
+	@cd stockpulse-ui && npm run dev
+
 clean: ## Remove outputs, cache, and generated files
 	@rm -rf outputs/reports/* outputs/json/* outputs/logs/* outputs/.cache 2>/dev/null
 	@echo '{"signals": [], "stats": {}, "validation": {}}' > outputs/.signal_tracker.json

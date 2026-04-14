@@ -1,0 +1,337 @@
+"""FastAPI server wrapping StockPulse modules."""
+import json
+import logging
+import threading
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="StockPulse API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _read_json(path: Path) -> dict | list:
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
+def _get_latest_scan() -> list[dict]:
+    """Get recommendations from the most recent scan JSON file."""
+    json_dir = PROJECT_ROOT / "outputs" / "json"
+    if not json_dir.exists():
+        return []
+    files = sorted(json_dir.glob("*.json"), reverse=True)
+    for f in files:
+        try:
+            data = _read_json(f)
+            if isinstance(data, dict) and "recommendations" in data:
+                return data.get("recommendations", [])
+        except Exception:
+            continue
+    return []
+
+
+def _parse_activity_log() -> list[dict]:
+    """Parse system log for activity events."""
+    log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
+    if not log_path.exists():
+        return []
+    events = []
+    try:
+        lines = log_path.read_text().strip().split("\n")
+        keywords = ["MORNING SCAN", "Intraday", "EOD", "SEC", "Portfolio",
+                     "discovered", "changes detected", "complete", "milestone",
+                     "Weekly", "Signal"]
+        for line in lines[-500:]:
+            if any(kw in line for kw in keywords):
+                # Parse: "2026-04-14 09:35:00,000 [INFO] module: message"
+                try:
+                    ts = line[:23]
+                    msg = line.split(": ", 1)[1] if ": " in line else line
+                    event_type = "scan" if "SCAN" in line else "portfolio" if "Portfolio" in line else "alert" if "discovered" in line else "system"
+                    events.append({"timestamp": ts, "type": event_type, "message": msg[:200]})
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return events[-50:]
+
+
+def _get_scan_status() -> dict:
+    """Check if a scan is currently running."""
+    log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
+    last_completed = "Never"
+    running = False
+    progress = ""
+    if log_path.exists():
+        try:
+            lines = log_path.read_text().strip().split("\n")
+            for line in reversed(lines[-200:]):
+                if "Scan complete" in line and last_completed == "Never":
+                    last_completed = line[:19]
+                if "MORNING SCAN START" in line and last_completed == "Never":
+                    running = True
+                if "Scanned " in line and "/" in line and running:
+                    try:
+                        progress = line.split("Scanned ")[1].split(" ")[0]
+                    except Exception:
+                        pass
+                    break
+        except Exception:
+            pass
+    return {
+        "running": running,
+        "progress": progress,
+        "last_completed": last_completed,
+        "next_scheduled": "09:35 ET",
+    }
+
+
+# ═══════════════════════════════════════════════════
+# Dashboard
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/dashboard")
+def get_dashboard():
+    from stockpulse.portfolio.tracker import get_portfolio_status
+    portfolio = get_portfolio_status()
+    all_recs = _get_latest_scan()
+    top_signals = sorted(all_recs, key=lambda r: abs(r.get("composite_score", 0)), reverse=True)[:10]
+    counts = {}
+    for r in all_recs:
+        a = r.get("action", "HOLD")
+        counts[a] = counts.get(a, 0) + 1
+    return {
+        "portfolio": portfolio,
+        "top_signals": top_signals,
+        "activity": _parse_activity_log(),
+        "scan_status": _get_scan_status(),
+        "signal_count": counts,
+        "total_scanned": len(all_recs),
+    }
+
+
+# ═══════════════════════════════════════════════════
+# Watchlist
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/watchlist")
+def get_watchlist():
+    from stockpulse.config.settings import load_watchlists
+    wl = load_watchlists()
+    all_recs = _get_latest_scan()
+    recs_map = {r["ticker"]: r for r in all_recs}
+    result = []
+    seen = set()
+    for ticker in wl.get("user", []):
+        rec = recs_map.get(ticker, {"ticker": ticker, "action": "UNKNOWN", "composite_score": 0, "confidence": 0})
+        rec["source"] = "user"
+        result.append(rec)
+        seen.add(ticker)
+    for ticker in wl.get("discovered", []):
+        if ticker not in seen:
+            rec = recs_map.get(ticker, {"ticker": ticker, "action": "UNKNOWN", "composite_score": 0, "confidence": 0})
+            rec["source"] = "discovered"
+            result.append(rec)
+            seen.add(ticker)
+    result.sort(key=lambda x: x.get("composite_score", 0), reverse=True)
+    return result
+
+
+@app.get("/api/watchlist/{ticker}")
+def get_watchlist_ticker(ticker: str):
+    from stockpulse.data.provider import get_price_history
+    from stockpulse.research.recommendation import generate_recommendation
+    df = get_price_history(ticker.upper(), period="1y")
+    if df.empty:
+        raise HTTPException(404, f"No data for {ticker}")
+    return generate_recommendation(ticker.upper(), df)
+
+
+# ═══════════════════════════════════════════════════
+# Portfolio
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/portfolio")
+def get_portfolio():
+    from stockpulse.portfolio.tracker import get_portfolio_status
+    from stockpulse.portfolio.risk import check_drawdown_status
+    status = get_portfolio_status()
+    peak = max(status["total_current"], status["total_invested"]) if status["total_invested"] > 0 else 1
+    dd = check_drawdown_status(status["total_current"], peak)
+    return {**status, "drawdown": dd}
+
+
+# ═══════════════════════════════════════════════════
+# Signals (on-demand analysis)
+# ═══════════════════════════════════════════════════
+
+@app.post("/api/analyze/{ticker}")
+def analyze_ticker(ticker: str):
+    from stockpulse.data.provider import get_price_history
+    from stockpulse.research.recommendation import generate_recommendation
+    df = get_price_history(ticker.upper(), period="1y")
+    if df.empty:
+        raise HTTPException(404, f"No data for {ticker}")
+    return generate_recommendation(ticker.upper(), df)
+
+
+# ═══════════════════════════════════════════════════
+# Validation
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/validation")
+def get_validation():
+    return _read_json(PROJECT_ROOT / "outputs" / ".signal_tracker.json") or {"signals": [], "stats": {}, "validation": {}}
+
+
+# ═══════════════════════════════════════════════════
+# Reports
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/reports")
+def list_reports():
+    reports_dir = PROJECT_ROOT / "outputs" / "reports"
+    if not reports_dir.exists():
+        return []
+    result = []
+    for f in sorted(reports_dir.glob("*.md"), reverse=True):
+        name = f.stem
+        parts = name.split("-")
+        date_str = "-".join(parts[:3]) if len(parts) >= 3 else name
+        rtype = parts[3] if len(parts) > 3 else "unknown"
+        result.append({"filename": f.name, "date": date_str, "type": rtype, "title": f.name})
+    return result
+
+
+@app.get("/api/reports/{filename}")
+def get_report(filename: str):
+    path = PROJECT_ROOT / "outputs" / "reports" / filename
+    if not path.exists() or ".." in filename:
+        raise HTTPException(404, "Report not found")
+    return {"filename": filename, "content": path.read_text()}
+
+
+# ═══════════════════════════════════════════════════
+# Alerts
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/alerts/recent")
+def get_recent_alerts():
+    log_path = PROJECT_ROOT / "outputs" / "logs" / "alerts.log"
+    if not log_path.exists():
+        return []
+    alerts = []
+    for line in log_path.read_text().strip().split("\n")[-50:]:
+        try:
+            alerts.append(json.loads(line))
+        except Exception:
+            pass
+    alerts.reverse()
+    return alerts
+
+
+# ═══════════════════════════════════════════════════
+# Activity
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/activity")
+def get_activity():
+    return _parse_activity_log()
+
+
+# ═══════════════════════════════════════════════════
+# Scan control
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/scan/status")
+def get_scan_status():
+    return _get_scan_status()
+
+
+@app.post("/api/scan")
+def trigger_scan():
+    def _run():
+        from stockpulse.scheduler.jobs import morning_scan_job
+        morning_scan_job()
+    threading.Thread(target=_run, daemon=True).start()
+    return {"status": "started"}
+
+
+# ═══════════════════════════════════════════════════
+# Market data
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/quote/{ticker}")
+def get_quote(ticker: str):
+    from stockpulse.data.provider import get_current_quote
+    return get_current_quote(ticker.upper())
+
+
+@app.get("/api/history/{ticker}")
+def get_history(ticker: str, period: str = "6mo"):
+    from stockpulse.data.provider import get_price_history
+    df = get_price_history(ticker.upper(), period=period)
+    if df.empty:
+        raise HTTPException(404, f"No data for {ticker}")
+    return {
+        "dates": [d.isoformat() for d in df.index],
+        "close": [round(float(v), 2) for v in df["Close"]],
+        "volume": [int(v) for v in df["Volume"]],
+        "high": [round(float(v), 2) for v in df["High"]],
+        "low": [round(float(v), 2) for v in df["Low"]],
+        "open": [round(float(v), 2) for v in df["Open"]],
+    }
+
+
+# ═══════════════════════════════════════════════════
+# Config
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/config")
+def get_config_endpoint():
+    from stockpulse.config.settings import load_strategies
+    return load_strategies()
+
+
+# ═══════════════════════════════════════════════════
+# Watchlist management
+# ═══════════════════════════════════════════════════
+
+@app.post("/api/watchlist/add")
+def add_to_watchlist(data: dict):
+    from stockpulse.config.settings import load_watchlists, save_watchlists
+    ticker = data.get("ticker", "").upper()
+    if not ticker:
+        raise HTTPException(400, "ticker required")
+    wl = load_watchlists()
+    if ticker not in wl.get("user", []):
+        wl.setdefault("user", []).append(ticker)
+        save_watchlists(wl)
+    return {"status": "added", "ticker": ticker}
+
+
+@app.post("/api/watchlist/remove")
+def remove_from_watchlist(data: dict):
+    from stockpulse.config.settings import load_watchlists, save_watchlists
+    ticker = data.get("ticker", "").upper()
+    wl = load_watchlists()
+    if ticker in wl.get("user", []):
+        wl["user"].remove(ticker)
+    if ticker in wl.get("discovered", []):
+        wl["discovered"].remove(ticker)
+    wl["priority"] = [p for p in wl.get("priority", []) if p.get("ticker") != ticker]
+    save_watchlists(wl)
+    return {"status": "removed", "ticker": ticker}
