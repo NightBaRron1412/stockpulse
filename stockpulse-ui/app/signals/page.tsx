@@ -12,20 +12,24 @@ import type { Recommendation } from "@/lib/types";
 function SignalsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const initialTicker = searchParams.get("ticker") ?? "";
+  const paramTicker = searchParams.get("ticker") ?? "";
+  const savedTicker = typeof window !== "undefined" ? sessionStorage.getItem("stockpulse_last_signal") ?? "" : "";
+  const initialTicker = paramTicker || savedTicker;
+
   const [ticker, setTicker] = useState(initialTicker);
   const [data, setData] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAnalyze = useCallback(async () => {
-    const t = ticker.trim().toUpperCase();
+  const runAnalysis = useCallback(async (t: string) => {
     if (!t) return;
+    setTicker(t);
     setLoading(true);
     setError(null);
     try {
       const result = await api.analyze(t);
       setData(result);
+      sessionStorage.setItem("stockpulse_last_signal", t);
       router.replace(`/signals?ticker=${t}`, { scroll: false });
     } catch (e: any) {
       setError(e.message || "Analysis failed");
@@ -33,22 +37,18 @@ function SignalsContent() {
     } finally {
       setLoading(false);
     }
-  }, [ticker, router]);
+  }, [router]);
+
+  const handleAnalyze = useCallback(async () => {
+    const t = ticker.trim().toUpperCase();
+    if (t) runAnalysis(t);
+  }, [ticker, runAnalysis]);
 
   useEffect(() => {
-    if (initialTicker) {
-      const t = initialTicker.trim().toUpperCase();
-      setTicker(t);
-      setLoading(true);
-      api.analyze(t).then((result) => {
-        setData(result);
-        setLoading(false);
-      }).catch((e) => {
-        setError(e.message || "Analysis failed");
-        setLoading(false);
-      });
+    if (initialTicker && !data) {
+      runAnalysis(initialTicker.trim().toUpperCase());
     }
-  }, [initialTicker]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-6">

@@ -186,9 +186,19 @@ export default function WatchlistPage() {
                     >
                       <TableCell className="font-semibold">{rec.ticker}</TableCell>
                       <TableCell>
-                        <span className={cn("px-2 py-0.5 rounded text-xs font-medium", actionBadgeClass(rec.action))}>
-                          {rec.action}
-                        </span>
+                        {rec.action === "UNKNOWN" ? (
+                          <a
+                            href={`/signals?ticker=${rec.ticker}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25 hover:bg-blue-500/25 transition-colors"
+                          >
+                            Analyze →
+                          </a>
+                        ) : (
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", actionBadgeClass(rec.action))}>
+                            {rec.action}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
