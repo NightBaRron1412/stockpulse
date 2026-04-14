@@ -23,6 +23,7 @@ export function NavBar() {
   const { data: alerts } = usePolling<Alert[]>(api.alerts, 30000);
   const { data: scanStatus } = usePolling<ScanStatus>(api.scanStatus, 5000);
   const [bellOpen, setBellOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [clearedAt, setClearedAt] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("stockpulse_alerts_cleared_at");
@@ -44,26 +45,41 @@ export function NavBar() {
           <img src="/logo.svg" alt="StockPulse" className="w-7 h-7" />
           <span className="font-semibold text-lg tracking-tight">StockPulse</span>
         </Link>
-        {navItems.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "px-3 py-1.5 text-sm rounded-md transition-colors",
-                isActive
-                  ? "text-slate-100 bg-slate-800/70"
-                  : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="lg:hidden p-2 text-slate-400 hover:text-slate-100"
+          aria-label="Toggle navigation menu"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {menuOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            )}
+          </svg>
+        </button>
+        <div className="hidden lg:flex items-center gap-1">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "px-3 py-1.5 text-sm rounded-md transition-colors",
+                  isActive
+                    ? "text-slate-100 bg-slate-800/70"
+                    : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50"
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
         <div className="ml-auto flex items-center gap-4">
           {/* Notification bell with dropdown */}
           <div className="relative">
@@ -161,6 +177,31 @@ export function NavBar() {
           </div>
         </div>
       </div>
+      {menuOpen && (
+        <div className="lg:hidden border-t border-slate-800/50 px-4 py-2 bg-slate-950/95 backdrop-blur-xl">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
+                className={cn(
+                  "block px-3 py-2 text-sm rounded-md transition-colors",
+                  isActive
+                    ? "text-slate-100 bg-slate-800/70"
+                    : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50"
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </nav>
   );
 }

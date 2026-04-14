@@ -161,3 +161,16 @@
 .pulse-scan { animation: pulse-blue 1.5s ease-in-out infinite; }
 
 button, [role="button"] { cursor: pointer; }
+
+/* Tables scroll horizontally on mobile */
+@media (max-width: 768px) {
+  [data-slot="table-container"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stack stats cards vertically on mobile */
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

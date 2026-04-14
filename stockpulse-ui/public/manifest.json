@@ -1,0 +1,16 @@
+{
+  "name": "StockPulse",
+  "short_name": "StockPulse",
+  "description": "Trading Intelligence Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1e",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
