@@ -61,15 +61,19 @@ def get_recent_filings(ticker: str, lookback_days: int = 30) -> list[dict]:
                     continue
 
                 form = filing.form
-                description = getattr(filing, "description", "")
+                description = getattr(filing, "primary_doc_description", "") or getattr(filing, "description", "")
 
-                # Parse 8-K items from description
+                # Parse 8-K items — use filing.items attribute first (EdgarTools provides this directly)
                 items = []
                 importance = 0.20  # default
                 is_negative = False
 
                 if form == "8-K" or form == "8-K/A":
-                    items = _parse_8k_items(description)
+                    raw_items = getattr(filing, "items", "")
+                    if raw_items and isinstance(raw_items, str):
+                        items = [i.strip() for i in raw_items.split(",") if i.strip() in _8K_IMPORTANCE]
+                    if not items:
+                        items = _parse_8k_items(description)  # fallback to description parsing
                     if items:
                         # Use the highest-importance item
                         importance = max(_8K_IMPORTANCE.get(item, 0.20) for item in items)

@@ -56,11 +56,32 @@ def get_insider_transactions(ticker: str, lookback_days: int = 30) -> list[dict]
                 if filed_date < cutoff.date():
                     continue
 
+                # Get reporting owner name from EdgarTools
+                filer_name = "Unknown"
+                try:
+                    # Try all_entities first (gives reporting owner info)
+                    entities = getattr(filing, "all_entities", None)
+                    if entities and len(entities) > 1:
+                        # Second entity is typically the reporting person
+                        filer_name = entities[1].get("company", "") or entities[1].get("name", "Unknown")
+                    elif entities and len(entities) == 1:
+                        filer_name = entities[0].get("company", "Unknown")
+                    # Also try header for officer title
+                    header = getattr(filing, "header", None)
+                    if header and hasattr(header, "reporting_owner"):
+                        ro = header.reporting_owner
+                        if hasattr(ro, "name"):
+                            filer_name = ro.name
+                except Exception:
+                    pass
+
+                desc = getattr(filing, "primary_doc_description", "") or ""
+
                 results.append({
                     "form": "4",
                     "date": str(filed_date),
-                    "filer": getattr(filing, "filer", "Unknown"),
-                    "description": getattr(filing, "description", ""),
+                    "filer": filer_name,
+                    "description": desc,
                     "days_ago": (datetime.now().date() - filed_date).days,
                 })
             except Exception:
@@ -115,12 +136,15 @@ def score_insider_activity(ticker: str, lookback_days: int = 30) -> float:
     else:
         cluster_mult = 1.00
 
-    # Combine: sum of individual scores * cluster
-    raw_score = sum(buy_scores) * cluster_mult
+    # Use log1p diminishing returns for filing count (expert recommendation)
+    # Don't let 30 routine Form 4s score the same as 3 meaningful insider buys
+    import math
+    avg_score = sum(buy_scores) / len(buy_scores) if buy_scores else 0
+    count_factor = math.log1p(len(buy_scores))  # log(1+n): 1->0.69, 3->1.39, 10->2.40, 30->3.43
+    raw_score = avg_score * count_factor * cluster_mult
 
-    # Scale to [-100, 100] range
-    # Typical range: 0.5-5.0 raw score. Map 2.0 -> ~50, 4.0 -> ~80
-    scaled = min(raw_score * 25, 100.0)
+    # Scale: 1.0 raw -> ~25 score, cap at 60 (insider alone shouldn't dominate)
+    scaled = min(raw_score * 25, 60.0)
 
     return max(-100.0, min(100.0, scaled))
 
