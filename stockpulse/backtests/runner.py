@@ -18,10 +18,13 @@ def run_backtest(start_date: str | None = None, end_date: str | None = None, str
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     if strategy_name == "momentum_catalyst":
         from stockpulse.strategies.momentum_catalyst import MomentumCatalystStrategy
+        # Backtest uses technical-only scores (range ~-35 to +35),
+        # NOT the full composite score (range -100 to +100).
+        # So thresholds must be scaled for the backtest score range.
         MomentumCatalystStrategy.parameters.update({
-            "buy_threshold": strat_cfg.get("thresholds", {}).get("buy", 40),
-            "exit_threshold": strat_cfg.get("thresholds", {}).get("exit", 10),
-            "max_positions": bt_cfg.get("max_positions", 10),
+            "buy_threshold": 8,    # ~top 25% of technical score range
+            "exit_threshold": -5,  # exit when score turns mildly negative
+            "max_positions": bt_cfg.get("max_positions", 8),
             "universe": wl.get("user", ["AAPL", "MSFT", "NVDA", "AMD"])})
         print(f"Running backtest: {strategy_name}")
         print(f"  Period: {start.date()} to {end.date()}")
