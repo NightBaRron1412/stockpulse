@@ -37,3 +37,30 @@ def set_cached(key: str, data) -> None:
     path = _cache_path(key)
     with open(path, "wb") as f:
         pickle.dump({"time": datetime.now(), "data": data}, f)
+
+
+def cleanup_expired_cache() -> int:
+    """Remove expired cache files from disk. Returns count of files removed."""
+    if not _CACHE_DIR.exists():
+        return 0
+
+    removed = 0
+    ttl = timedelta(minutes=get_config()["cache_ttl_minutes"])
+    now = datetime.now()
+
+    for path in _CACHE_DIR.glob("*.pkl"):
+        try:
+            with open(path, "rb") as f:
+                entry = pickle.load(f)
+            if now - entry["time"] > ttl * 3:  # remove if 3x expired
+                path.unlink()
+                removed += 1
+        except Exception:
+            # Corrupt file — remove it
+            try:
+                path.unlink()
+                removed += 1
+            except Exception:
+                pass
+
+    return removed

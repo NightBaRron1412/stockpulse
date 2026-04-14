@@ -66,7 +66,7 @@ install-service: ## Install as a systemd user service (auto-start on boot)
 clean: ## Remove outputs, cache, and generated files
 	@rm -rf outputs/reports/* outputs/json/* outputs/logs/* outputs/.cache 2>/dev/null
 	@echo '{"signals": [], "stats": {}, "validation": {}}' > outputs/.signal_tracker.json
-	@echo '{"alerted_milestones": {}}' > outputs/.portfolio_state.json
+	@test -f outputs/.portfolio_state.json || echo '{"alerted_milestones": {}}' > outputs/.portfolio_state.json
 	@echo '{}' > outputs/.score_history.json
 	@echo "Cleaned all outputs"
 

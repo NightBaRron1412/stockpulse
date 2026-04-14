@@ -61,6 +61,15 @@ def eod_recap_job():
         perf = review_signals()
         if perf.get("total_signals", 0) > 0:
             logger.info("Signal performance: %s", perf)
+
+        # Daily cache cleanup
+        try:
+            from stockpulse.data.cache import cleanup_expired_cache
+            removed = cleanup_expired_cache()
+            if removed > 0:
+                logger.info("Cache cleanup: removed %d expired files", removed)
+        except Exception:
+            pass
     except Exception:
         logger.exception("EOD recap failed")
 

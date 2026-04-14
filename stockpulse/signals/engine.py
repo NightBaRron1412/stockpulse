@@ -1,7 +1,7 @@
 """Signal aggregator -- computes all signals for a ticker."""
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -141,6 +141,14 @@ def compute_score_acceleration(
     # Keep last 10 scans
     ticker_hist = ticker_hist[-10:]
     history[ticker] = ticker_hist
+
+    # Prune stale tickers (not updated in 30+ days)
+    cutoff = (datetime.now() - timedelta(days=30)).isoformat()[:10]
+    stale = [t for t, hist in history.items()
+             if hist and hist[-1].get("date", "") < cutoff]
+    for t in stale:
+        del history[t]
+
     _save_score_history(history)
 
     if len(ticker_hist) < 3:
