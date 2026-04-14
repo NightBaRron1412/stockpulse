@@ -9,20 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { ScanStatus } from "@/lib/types";
 
-interface ConfigData {
-  watchlist: string[];
-  strategy: {
-    weights: Record<string, number>;
-    thresholds: Record<string, number>;
-  };
-  scheduler: {
-    status: string;
-    scan_times: string[];
-  };
-}
-
 export default function SettingsPage() {
-  const { data: config, loading, error, refresh } = usePolling<ConfigData>(api.config, 60000);
+  const { data: config, loading, error, refresh } = usePolling<any>(api.config, 60000);
   const { data: scanStatus, refresh: refreshScan } = usePolling<ScanStatus>(api.scanStatus, 5000);
   const [addTicker, setAddTicker] = useState("");
   const [adding, setAdding] = useState(false);
@@ -37,8 +25,6 @@ export default function SettingsPage() {
       await api.addToWatchlist(t);
       setAddTicker("");
       refresh();
-    } catch {
-      // silently fail
     } finally {
       setAdding(false);
     }
@@ -49,8 +35,6 @@ export default function SettingsPage() {
     try {
       await api.removeFromWatchlist(ticker);
       refresh();
-    } catch {
-      // silently fail
     } finally {
       setRemoving(null);
     }
@@ -61,8 +45,6 @@ export default function SettingsPage() {
     try {
       await api.triggerScan();
       refreshScan();
-    } catch {
-      // silently fail
     } finally {
       setScanning(false);
     }
@@ -72,9 +54,7 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <div className="glass-card p-6 animate-pulse">
-          <div className="h-32 bg-slate-700/20 rounded" />
-        </div>
+        <div className="glass-card p-6 animate-pulse"><div className="h-32 bg-slate-700/20 rounded" /></div>
       </div>
     );
   }
@@ -83,15 +63,18 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <div className="glass-card p-6 text-red-400">Failed to load settings: {error}</div>
+        <div className="glass-card p-6 text-red-400">Failed to load: {error}</div>
       </div>
     );
   }
 
   const watchlist = config?.watchlist ?? [];
-  const weights = config?.strategy?.weights ?? {};
-  const thresholds = config?.strategy?.thresholds ?? {};
-  const maxWeight = Math.max(...Object.values(weights).map((w) => w ?? 0), 1);
+  const discovered = config?.discovered ?? [];
+  const weights = config?.weights ?? {};
+  const thresholds = config?.thresholds ?? {};
+  const risk = config?.risk ?? {};
+  const scheduling = config?.scheduling ?? {};
+  const maxWeight = Math.max(...Object.values(weights).map((w: any) => Number(w) || 0), 0.01);
 
   return (
     <div className="space-y-6">
@@ -99,7 +82,7 @@ export default function SettingsPage() {
 
       {/* Watchlist management */}
       <div className="glass-card p-6">
-        <h2 className="text-sm font-semibold text-slate-300 mb-4">Watchlist Tickers</h2>
+        <h2 className="text-sm font-semibold text-slate-300 mb-4">User Watchlist</h2>
         <div className="flex items-center gap-2 mb-4">
           <Input
             value={addTicker}
@@ -116,17 +99,13 @@ export default function SettingsPage() {
           <p className="text-sm text-slate-500">No tickers in watchlist</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {watchlist.map((ticker) => (
-              <div
-                key={ticker}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/40 border border-slate-700/30 text-sm"
-              >
+            {watchlist.map((ticker: string) => (
+              <div key={ticker} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/40 border border-slate-700/30 text-sm">
                 <span className="font-semibold">{ticker}</span>
                 <button
                   onClick={() => handleRemove(ticker)}
                   disabled={removing === ticker}
                   className="text-slate-500 hover:text-red-400 transition-colors ml-1"
-                  aria-label={`Remove ${ticker}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -136,9 +115,34 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+
+        {discovered.length > 0 && (
+          <>
+            <Separator className="my-4 bg-slate-700/50" />
+            <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+              Auto-Discovered ({discovered.length})
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {discovered.map((ticker: string) => (
+                <div key={ticker} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-950/30 border border-blue-800/20 text-sm">
+                  <span className="text-blue-300">{ticker}</span>
+                  <button
+                    onClick={() => handleRemove(ticker)}
+                    disabled={removing === ticker}
+                    className="text-slate-500 hover:text-red-400 transition-colors ml-1"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Strategy viewer */}
+      {/* Signal Weights */}
       <div className="glass-card p-6">
         <h2 className="text-sm font-semibold text-slate-300 mb-4">Signal Weights</h2>
         {Object.keys(weights).length === 0 ? (
@@ -146,17 +150,19 @@ export default function SettingsPage() {
         ) : (
           <div className="space-y-2">
             {Object.entries(weights)
-              .sort(([, a], [, b]) => b - a)
-              .map(([name, weight]) => (
+              .sort(([, a]: any, [, b]: any) => (b ?? 0) - (a ?? 0))
+              .map(([name, weight]: [string, any]) => (
                 <div key={name} className="flex items-center gap-3">
                   <span className="text-xs text-slate-400 w-36 truncate text-right">{name}</span>
                   <div className="flex-1 h-2 bg-slate-700/30 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
-                      style={{ width: `${((weight ?? 0) / maxWeight) * 100}%` }}
+                      style={{ width: `${((Number(weight) || 0) / maxWeight) * 100}%` }}
                     />
                   </div>
-                  <span className="font-mono-data text-xs text-slate-300 w-10 text-right">{weight != null ? weight.toFixed(2) : "--"}</span>
+                  <span className="font-mono-data text-xs text-slate-300 w-10 text-right">
+                    {weight != null ? Number(weight).toFixed(2) : "--"}
+                  </span>
                 </div>
               ))}
           </div>
@@ -167,10 +173,25 @@ export default function SettingsPage() {
             <Separator className="my-4 bg-slate-700/50" />
             <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Thresholds</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {Object.entries(thresholds).map(([name, val]) => (
+              {Object.entries(thresholds).map(([name, val]: [string, any]) => (
                 <div key={name} className="flex justify-between text-xs">
                   <span className="text-slate-400">{name}</span>
-                  <span className="font-mono-data text-slate-300">{typeof val === "number" ? val.toFixed(2) : String(val)}</span>
+                  <span className="font-mono-data text-slate-300">{val}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {Object.keys(risk).length > 0 && (
+          <>
+            <Separator className="my-4 bg-slate-700/50" />
+            <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Risk Limits</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Object.entries(risk).map(([name, val]: [string, any]) => (
+                <div key={name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{name.replace(/_/g, " ")}</span>
+                  <span className="font-mono-data text-slate-300">{typeof val === "number" ? val : String(val)}</span>
                 </div>
               ))}
             </div>
@@ -182,49 +203,36 @@ export default function SettingsPage() {
       <div className="glass-card p-6">
         <h2 className="text-sm font-semibold text-slate-300 mb-4">Scan Controls</h2>
         <div className="flex items-center gap-4">
-          <Button
-            onClick={handleScan}
-            disabled={scanning || scanStatus?.running}
-            className="h-10"
-          >
+          <Button onClick={handleScan} disabled={scanning || scanStatus?.running} className="h-10">
             {scanning || scanStatus?.running ? "Scanning..." : "Run Full Scan"}
           </Button>
           <div className="flex items-center gap-2 text-sm text-slate-400">
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                scanStatus?.running ? "bg-blue-500 pulse-scan" : "bg-green-500"
-              )}
-            />
+            <div className={cn("w-2 h-2 rounded-full", scanStatus?.running ? "bg-blue-500 pulse-scan" : "bg-green-500")} />
             <span>{scanStatus?.running ? scanStatus.progress || "In progress" : "Idle"}</span>
           </div>
         </div>
         {scanStatus && (
           <div className="mt-3 text-xs text-slate-500 space-y-0.5">
-            {scanStatus.last_completed && (
-              <p>Last completed: <span className="font-mono-data">{scanStatus.last_completed}</span></p>
-            )}
-            {scanStatus.next_scheduled && (
-              <p>Next scheduled: <span className="font-mono-data">{scanStatus.next_scheduled}</span></p>
-            )}
+            <p>Last completed: <span className="font-mono-data">{scanStatus.last_completed ?? "Never"}</span></p>
+            <p>Next scheduled: <span className="font-mono-data">{scanStatus.next_scheduled ?? "--"}</span></p>
           </div>
         )}
       </div>
 
-      {/* System info */}
-      <div className="glass-card p-6">
-        <h2 className="text-sm font-semibold text-slate-300 mb-4">System Info</h2>
-        <div className="text-sm text-slate-400 space-y-1">
-          <p>
-            Scheduler: <span className="text-slate-300">{config?.scheduler?.status ?? "Unknown"}</span>
-          </p>
-          {config?.scheduler?.scan_times && config.scheduler.scan_times.length > 0 && (
-            <p>
-              Scan times: <span className="font-mono-data text-slate-300">{config.scheduler.scan_times.join(", ")}</span>
-            </p>
-          )}
+      {/* Schedule info */}
+      {Object.keys(scheduling).length > 0 && (
+        <div className="glass-card p-6">
+          <h2 className="text-sm font-semibold text-slate-300 mb-4">Schedule</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {Object.entries(scheduling).map(([name, val]: [string, any]) => (
+              <div key={name} className="flex justify-between text-xs">
+                <span className="text-slate-400">{name.replace(/_/g, " ")}</span>
+                <span className="font-mono-data text-slate-300">{String(val)}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

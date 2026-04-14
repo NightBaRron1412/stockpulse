@@ -25,6 +25,7 @@ export default function WatchlistPage() {
   const [search, setSearch] = useState("");
   const [addTicker, setAddTicker] = useState("");
   const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   const handleAdd = useCallback(async () => {
@@ -35,12 +36,20 @@ export default function WatchlistPage() {
       await api.addToWatchlist(ticker);
       setAddTicker("");
       refresh();
-    } catch {
-      // silently fail
     } finally {
       setAdding(false);
     }
   }, [addTicker, refresh]);
+
+  const handleRemove = useCallback(async (ticker: string) => {
+    setRemoving(ticker);
+    try {
+      await api.removeFromWatchlist(ticker);
+      refresh();
+    } finally {
+      setRemoving(null);
+    }
+  }, [refresh]);
 
   const items = (data ?? [])
     .filter((r) => filter === "ALL" || r.action === filter)
@@ -138,6 +147,7 @@ export default function WatchlistPage() {
                   <TableHead className="text-slate-400 text-xs">Confidence</TableHead>
                   <TableHead className="text-slate-400 text-xs">Thesis</TableHead>
                   <TableHead className="text-slate-400 text-xs">Source</TableHead>
+                  <TableHead className="text-slate-400 text-xs w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -181,10 +191,22 @@ export default function WatchlistPage() {
                       <TableCell className="text-xs text-slate-500 capitalize">
                         {rec.source ?? "user"}
                       </TableCell>
+                      <TableCell>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemove(rec.ticker); }}
+                          disabled={removing === rec.ticker}
+                          className="text-slate-600 hover:text-red-400 transition-colors"
+                          title={`Remove ${rec.ticker}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </TableCell>
                     </TableRow>
                     {expandedTicker === rec.ticker && (
                       <TableRow key={`${rec.ticker}-detail`} className="border-slate-700/30 bg-slate-800/20">
-                        <TableCell colSpan={6} className="p-4">
+                        <TableCell colSpan={7} className="p-4">
                           <SignalDetail rec={rec} />
                         </TableCell>
                       </TableRow>

@@ -302,8 +302,25 @@ def get_history(ticker: str, period: str = "6mo"):
 
 @app.get("/api/config")
 def get_config_endpoint():
-    from stockpulse.config.settings import load_strategies
-    return load_strategies()
+    from stockpulse.config.settings import load_strategies, load_watchlists
+    strat = load_strategies()
+    wl = load_watchlists()
+    # Flatten signal weights for the UI
+    weights = {}
+    for name, cfg in strat.get("signals", {}).items():
+        w = cfg.get("weight", 0) if isinstance(cfg, dict) else 0
+        if w > 0:
+            weights[name] = w
+    return {
+        "watchlist": wl.get("user", []),
+        "discovered": wl.get("discovered", []),
+        "signals": strat.get("signals", {}),
+        "weights": weights,
+        "thresholds": strat.get("thresholds", {}),
+        "confirmation": strat.get("confirmation", {}),
+        "risk": strat.get("risk", {}),
+        "scheduling": strat.get("scheduling", {}),
+    }
 
 
 # ═══════════════════════════════════════════════════
