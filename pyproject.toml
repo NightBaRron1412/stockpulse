@@ -44,6 +44,12 @@ stockpulse = "run:main"
 [tool.setuptools.packages.find]
 include = ["stockpulse*"]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pandas.errors.Pandas4Warning",
+    "ignore::RuntimeWarning:scipy",
+]
+
 [build-system]
 requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
