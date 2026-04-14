@@ -56,3 +56,36 @@ export function getSignalLabel(key: string): string {
 export function getSignalDescription(key: string): string {
   return SIGNAL_LABELS[key]?.description ?? "";
 }
+
+export const THRESHOLD_LABELS: Record<string, { name: string; description: string }> = {
+  buy: { name: "BUY Threshold", description: "Composite score >= this for a BUY signal" },
+  watchlist: { name: "WATCHLIST Threshold", description: "Score >= this for WATCHLIST" },
+  watchlist_relaxed: { name: "WATCHLIST (Relaxed)", description: "Lower threshold when trend + RS confirm" },
+  caution: { name: "CAUTION Threshold", description: "Score <= this flags CAUTION for held positions" },
+  sell: { name: "SELL Threshold", description: "Score <= this for SELL signal" },
+  exit: { name: "Exit Threshold", description: "Score below this triggers exit" },
+  confidence_min: { name: "Min Confidence", description: "Minimum confidence to trigger alerts" },
+};
+
+export const RISK_LABELS: Record<string, { name: string; description: string }> = {
+  max_position_pct: { name: "Max Position %", description: "Max portfolio allocation per position" },
+  max_sector_pct: { name: "Max Sector %", description: "Max allocation per sector" },
+  risk_per_trade_pct: { name: "Risk Per Trade %", description: "Max risk per trade (ATR-based)" },
+  max_positions: { name: "Max Positions", description: "Max simultaneous positions" },
+  drawdown_half: { name: "Drawdown Half %", description: "At this drawdown, halve position sizes" },
+  drawdown_pause: { name: "Drawdown Pause %", description: "At this drawdown, pause all new buys" },
+  earnings_blackout_days: { name: "Earnings Blackout", description: "No new entries within this many days of earnings" },
+};
+
+export function getThresholdLabel(key: string): string {
+  return THRESHOLD_LABELS[key]?.name ?? key.replace(/_/g, " ");
+}
+export function getThresholdDescription(key: string): string {
+  return THRESHOLD_LABELS[key]?.description ?? "";
+}
+export function getRiskLabel(key: string): string {
+  return RISK_LABELS[key]?.name ?? key.replace(/_/g, " ");
+}
+export function getRiskDescription(key: string): string {
+  return RISK_LABELS[key]?.description ?? "";
+}

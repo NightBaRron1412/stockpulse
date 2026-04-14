@@ -7,7 +7,6 @@ import { Progress } from "@/components/ui/progress";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const PHASES = [
   { name: "PILOT", min: 0, label: "0-50 signals" },
@@ -222,7 +221,7 @@ export default function ValidationPage() {
           <div className="px-5 py-4 border-b border-slate-700/50">
             <h2 className="text-sm font-semibold text-slate-300">Tracked Signals ({signals.length})</h2>
           </div>
-          <ScrollArea style={{ maxHeight: "400px" }}>
+          <div className="overflow-y-auto max-h-[400px]">
             <Table>
               <TableHeader>
                 <TableRow className="border-slate-700/50 hover:bg-transparent">
@@ -266,7 +265,7 @@ export default function ValidationPage() {
                 })}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </div>
       )}
     </div>

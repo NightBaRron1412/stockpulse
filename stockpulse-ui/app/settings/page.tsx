@@ -4,10 +4,11 @@ import { useState, useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { getSignalLabel } from "@/lib/signal-labels";
+import { getSignalLabel, getThresholdLabel, getThresholdDescription, getRiskLabel, getRiskDescription } from "@/lib/signal-labels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ScanStatus } from "@/lib/types";
 
 export default function SettingsPage() {
@@ -20,6 +21,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [editedThresholds, setEditedThresholds] = useState<Record<string, string> | null>(null);
   const [editedRisk, setEditedRisk] = useState<Record<string, string> | null>(null);
+  const [editingThresholds, setEditingThresholds] = useState(false);
+  const [editingRisk, setEditingRisk] = useState(false);
 
   const handleAdd = useCallback(async () => {
     const t = addTicker.trim().toUpperCase();
@@ -93,27 +96,11 @@ export default function SettingsPage() {
   const currentRisk = editedRisk ?? Object.fromEntries(
     Object.entries(risk).map(([k, v]) => [k, String(v)])
   );
-  const hasChanges = editedThresholds !== null || editedRisk !== null;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Settings</h1>
-        {hasChanges && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setEditedThresholds(null); setEditedRisk(null); }}
-              className="h-8 border-slate-700 text-slate-400"
-            >
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSaveConfig} disabled={saving} className="h-8">
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Watchlist management */}
@@ -212,19 +199,27 @@ export default function SettingsPage() {
       <div className="glass-card p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-300">Thresholds</h2>
-          <span className="text-[10px] text-blue-400 uppercase">Editable</span>
+          {!editingThresholds ? (
+            <Button variant="outline" size="sm" onClick={() => { setEditingThresholds(true); setEditedThresholds({...currentThresholds}); }} className="h-7 text-xs border-slate-700">Edit</Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setEditingThresholds(false); setEditedThresholds(null); }} className="h-7 text-xs border-slate-700">Cancel</Button>
+              <Button size="sm" onClick={() => { handleSaveConfig(); setEditingThresholds(false); }} disabled={saving} className="h-7 text-xs">Save</Button>
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(currentThresholds).map(([name, val]) => (
             <div key={name} className="space-y-1">
-              <label className="text-xs text-slate-400">{name.replace(/_/g, " ")}</label>
-              <Input
-                value={val}
-                onChange={(e) => {
-                  setEditedThresholds({ ...currentThresholds, [name]: e.target.value });
-                }}
-                className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data"
-              />
+              <Tooltip>
+                <TooltipTrigger className="cursor-help text-xs text-slate-400">{getThresholdLabel(name)}</TooltipTrigger>
+                <TooltipContent className="max-w-[250px] bg-slate-800 border-slate-700"><p className="text-xs">{getThresholdDescription(name)}</p></TooltipContent>
+              </Tooltip>
+              {editingThresholds ? (
+                <Input value={val} onChange={(e) => setEditedThresholds({...currentThresholds, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
+              ) : (
+                <span className="font-mono-data text-slate-300">{val}</span>
+              )}
             </div>
           ))}
         </div>
@@ -234,19 +229,27 @@ export default function SettingsPage() {
       <div className="glass-card p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-300">Risk Limits</h2>
-          <span className="text-[10px] text-blue-400 uppercase">Editable</span>
+          {!editingRisk ? (
+            <Button variant="outline" size="sm" onClick={() => { setEditingRisk(true); setEditedRisk({...currentRisk}); }} className="h-7 text-xs border-slate-700">Edit</Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setEditingRisk(false); setEditedRisk(null); }} className="h-7 text-xs border-slate-700">Cancel</Button>
+              <Button size="sm" onClick={() => { handleSaveConfig(); setEditingRisk(false); }} disabled={saving} className="h-7 text-xs">Save</Button>
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Object.entries(currentRisk).map(([name, val]) => (
             <div key={name} className="space-y-1">
-              <label className="text-xs text-slate-400">{name.replace(/_/g, " ")}</label>
-              <Input
-                value={val}
-                onChange={(e) => {
-                  setEditedRisk({ ...currentRisk, [name]: e.target.value });
-                }}
-                className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data"
-              />
+              <Tooltip>
+                <TooltipTrigger className="cursor-help text-xs text-slate-400">{getRiskLabel(name)}</TooltipTrigger>
+                <TooltipContent className="max-w-[250px] bg-slate-800 border-slate-700"><p className="text-xs">{getRiskDescription(name)}</p></TooltipContent>
+              </Tooltip>
+              {editingRisk ? (
+                <Input value={val} onChange={(e) => setEditedRisk({...currentRisk, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
+              ) : (
+                <span className="font-mono-data text-slate-300">{val}</span>
+              )}
             </div>
           ))}
         </div>

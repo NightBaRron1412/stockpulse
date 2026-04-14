@@ -159,3 +159,5 @@
   50% { opacity: 0.4; }
 }
 .pulse-scan { animation: pulse-blue 1.5s ease-in-out infinite; }
+
+button, [role="button"] { cursor: pointer; }
