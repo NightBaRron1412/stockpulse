@@ -6,3 +6,4 @@ outputs/
 backtests/results/
 *.egg-info/
 .cache/
+logs/

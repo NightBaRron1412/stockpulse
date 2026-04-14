@@ -1,3 +1,0 @@
-time,side,status,filled_quantity,symbol,asset.asset_type,asset.right,asset.strike,asset.expiration,price,type,asset.multiplier,trade_cost,trade_slippage,event_kind,event_id,cash_event_type,cash_event_amount,cash_event_currency,cash_event_description,cash_event_direction,cash_event_reason,is_external_cash_flow,cash_event_raw_type,cash_event_raw_subtype,cash_event_broker_name,cash_event_broker_event_id
-2025-10-01 09:30:00-04:00,buy,new,,AAPL,stock,,0.0,,,market,1,,0.0,trade,,,,,,,,,,,,
-2025-10-01 09:30:00-04:00,buy,fill,196.0,AAPL,stock,,0.0,,255.0399932861328,market,1,0.0,0.0,trade,,,,,,,,,,,,
