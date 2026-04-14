@@ -122,7 +122,7 @@ def _get_scan_status() -> dict:
     if log_path.exists():
         try:
             lines = log_path.read_text().strip().split("\n")
-            for line in reversed(lines[-200:]):
+            for line in reversed(lines):
                 if "Scan complete" in line and last_completed == "Never":
                     last_completed = line[:19]
                 if "MORNING SCAN START" in line and last_completed == "Never":
