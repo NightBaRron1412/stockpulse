@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Fragment, useState, useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { actionBadgeClass, formatScore, cn } from "@/lib/utils";
@@ -153,9 +153,8 @@ export default function WatchlistPage() {
               </TableHeader>
               <TableBody>
                 {items.map((rec) => (
-                  <>
+                  <Fragment key={rec.ticker}>
                     <TableRow
-                      key={rec.ticker}
                       className="border-slate-700/30 hover:bg-slate-800/30 cursor-pointer"
                       onClick={() =>
                         setExpandedTicker(expandedTicker === rec.ticker ? null : rec.ticker)
@@ -212,7 +211,7 @@ export default function WatchlistPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

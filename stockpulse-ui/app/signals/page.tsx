@@ -37,11 +37,18 @@ function SignalsContent() {
 
   useEffect(() => {
     if (initialTicker) {
-      handleAnalyze();
+      const t = initialTicker.trim().toUpperCase();
+      setTicker(t);
+      setLoading(true);
+      api.analyze(t).then((result) => {
+        setData(result);
+        setLoading(false);
+      }).catch((e) => {
+        setError(e.message || "Analysis failed");
+        setLoading(false);
+      });
     }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialTicker]);
 
   return (
     <div className="space-y-6">
