@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from stockpulse.config.settings import load_portfolio
 from stockpulse.signals.engine import (
     compute_all_signals, check_confirmation_buckets, compute_score_acceleration,
 )
@@ -129,6 +130,19 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
             if confirmation.get("passes", False):
                 action = "BUY"
 
+    # Add risk assessment
+    from stockpulse.portfolio.risk import check_concentration_limits
+    try:
+        portfolio = load_portfolio()
+        positions = portfolio.get("positions", [])
+        if positions:
+            total_value = sum(p["shares"] * p["entry_price"] for p in positions)
+            risk_check = check_concentration_limits(ticker, positions, total_value)
+        else:
+            risk_check = {"allowed": True, "reasons": [], "size_multiplier": 1.0, "sector": "", "industry": "", "cluster_tickers": []}
+    except Exception:
+        risk_check = {"allowed": True, "reasons": [], "size_multiplier": 1.0, "sector": "", "industry": "", "cluster_tickers": []}
+
     return {
         "ticker": ticker,
         "timestamp": datetime.now().isoformat(),
@@ -141,6 +155,7 @@ def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
         "invalidation": invalidation,
         "signals": signals,
         "confirmation": confirmation,
+        "risk": risk_check,
     }
 
 def rank_recommendations(recommendations: list[dict]) -> list[dict]:
