@@ -23,10 +23,13 @@ export function NavBar() {
   const { data: alerts } = usePolling<Alert[]>(api.alerts, 30000);
   const { data: scanStatus } = usePolling<ScanStatus>(api.scanStatus, 5000);
   const [bellOpen, setBellOpen] = useState(false);
-  const [dismissedCount, setDismissedCount] = useState(0);
+  const [clearedAt, setClearedAt] = useState<string | null>(null);
 
-  const alertCount = alerts?.length ?? 0;
-  const unreadCount = Math.max(0, alertCount - dismissedCount);
+  const allAlerts = alerts ?? [];
+  const visibleAlerts = clearedAt
+    ? allAlerts.filter((a) => (a.timestamp ?? "") > clearedAt)
+    : allAlerts;
+  const unreadCount = visibleAlerts.length;
   const isScanning = scanStatus?.running ?? false;
 
   return (
@@ -95,19 +98,19 @@ export function NavBar() {
                   <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-200">Notifications</span>
                     <button
-                      onClick={() => { setBellOpen(false); setDismissedCount(alertCount); }}
+                      onClick={() => { setBellOpen(false); setClearedAt(new Date().toISOString()); }}
                       className="text-xs text-blue-400 hover:text-blue-300"
                     >
                       Clear all
                     </button>
                   </div>
-                  {alertCount === 0 ? (
+                  {visibleAlerts.length === 0 ? (
                     <div className="p-6 text-center text-slate-500 text-sm">
                       No recent alerts
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-700/30">
-                      {(alerts ?? []).slice(0, 20).map((alert, i) => (
+                      {visibleAlerts.slice(0, 20).map((alert, i) => (
                         <div key={i} className="px-4 py-3 hover:bg-slate-800/30">
                           <div className="flex items-center gap-2 mb-1">
                             <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", actionBadgeClass(alert.action ?? "INFO"))}>
