@@ -64,3 +64,10 @@ def test_pead_returns_bounded_score():
     from stockpulse.signals.pead import calc_pead_score
     score = calc_pead_score("AAPL")
     assert -100 <= score <= 100
+
+
+def test_news_sentiment_with_llm_returns_bounded():
+    """News sentiment should return bounded score whether LLM is available or not."""
+    from stockpulse.signals.fundamental import calc_news_sentiment_signal
+    score = calc_news_sentiment_signal("AAPL")
+    assert -100 <= score <= 100

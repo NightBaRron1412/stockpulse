@@ -4,27 +4,27 @@ signals:
     oversold: 30
     overbought: 70
     pullback_zone: [40, 50]  # in uptrends, RSI 40-50 = buyable pullback
-    weight: 0.08
+    weight: 0.07
   macd:
     fast: 12
     slow: 26
     signal: 9
-    weight: 0.08
+    weight: 0.07
   moving_averages:
     fast_ema: 20
     medium_sma: 50
     slow_sma: 200
-    weight: 0.11
+    weight: 0.10
   volume:
     rvol_confirm: 1.5     # RVOL >= 1.5 = valid confirmation
     rvol_strong: 2.0      # RVOL >= 2.0 = strong catalyst
     lookback: 20
-    weight: 0.15
+    weight: 0.14
   breakout:
     periods: [20, 55, 252]  # multi-timeframe breakouts
     require_volume: true
     rvol_min: 1.5
-    weight: 0.16
+    weight: 0.15
   gap:
     threshold_pct: 0.5
     weight: 0.04
@@ -38,13 +38,13 @@ signals:
   sec_filing:
     lookback_days: 30
     insider_buy_weight: 3  # insider buys scored 3x heavier than sells
-    weight: 0.20
+    weight: 0.18
   news_sentiment:
-    weight: 0.00           # keyword-based is noise per expert
+    weight: 0.08           # LLM event classification per expert (5-10% range)
   relative_strength:
     benchmark: "SPY"
     periods: [20, 60]
-    weight: 0.12
+    weight: 0.11
 
 thresholds:
   buy: 55

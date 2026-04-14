@@ -64,25 +64,17 @@ def calc_sec_filing_signal(ticker: str) -> float:
     return _clamp(combined)
 
 def calc_news_sentiment_signal(ticker: str) -> float:
+    """News sentiment signal using LLM event classification.
+
+    Uses AMD Claude API for structured analysis when available,
+    falls back to keyword counting (with lower scores) when not.
+    """
     try:
-        news = get_news(ticker)
+        from stockpulse.llm.news_analyzer import analyze_news_sentiment
+        result = analyze_news_sentiment(ticker)
+        return max(-100.0, min(100.0, result["score"]))
     except ValueError:
         return 0.0
-    if not news:
+    except Exception:
+        logger.debug("News sentiment failed for %s", ticker)
         return 0.0
-    positive_count = 0
-    negative_count = 0
-    for item in news:
-        title = item.get("title", "").lower()
-        for kw in _POSITIVE_KEYWORDS:
-            if kw in title:
-                positive_count += 1
-        for kw in _NEGATIVE_KEYWORDS:
-            if kw in title:
-                negative_count += 1
-    if positive_count + negative_count == 0:
-        return 0.0
-    net = positive_count - negative_count
-    total = positive_count + negative_count
-    ratio = net / total
-    return _clamp(ratio * 60)
