@@ -1,22 +1,32 @@
-"""Signal performance tracker — measures whether signals predict future price moves.
+"""Signal performance tracker with statistical validation per expert specs.
 
-Logs every BUY/WATCHLIST signal with the price at signal time. A scheduled job
-checks prices 5/10/20 trading days later and records the outcome. Over time this
-builds a record of hit rates, avg return, and signal quality.
+Primary endpoint: BUY signals, 10-trading-day excess return vs SPY.
+Secondary: 5d, 20d horizons. WATCHLIST tracked separately.
 
-Data stored in outputs/.signal_tracker.json.
+Statistical tests:
+- Paired t-test on excess returns
+- Wilcoxon signed-rank test
+- Exact binomial on relative hit rate
+- Bootstrap 95% CI
+- BUY vs WATCHLIST separation
 """
 
 import json
 import logging
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from stockpulse.data.provider import get_current_quote
+import numpy as np
+from scipy import stats as scipy_stats
+
+from stockpulse.config.settings import get_config
+from stockpulse.data.provider import get_current_quote, get_price_history
 
 logger = logging.getLogger(__name__)
 
 _TRACKER_FILE = Path(__file__).resolve().parent.parent.parent / "outputs" / ".signal_tracker.json"
+_HORIZONS = {"5d": 7, "10d": 14, "20d": 28}  # calendar days approximation
 
 
 def _load_tracker() -> dict:
@@ -26,7 +36,7 @@ def _load_tracker() -> dict:
                 return json.load(f)
         except Exception:
             pass
-    return {"signals": [], "stats": {}}
+    return {"signals": [], "stats": {}, "validation": {}}
 
 
 def _save_tracker(data: dict) -> None:
@@ -36,22 +46,17 @@ def _save_tracker(data: dict) -> None:
 
 
 def log_signal(recommendation: dict) -> None:
-    """Log a BUY or WATCHLIST signal for future performance tracking.
-
-    Called automatically when a recommendation with action BUY or WATCHLIST is generated.
-    """
+    """Log a BUY or WATCHLIST signal for future performance tracking."""
     action = recommendation.get("action", "")
     if action not in ("BUY", "WATCHLIST"):
         return
 
     tracker = _load_tracker()
     ticker = recommendation["ticker"]
-
-    # Don't log duplicate signals for the same ticker on the same day
     today = datetime.now().strftime("%Y-%m-%d")
-    existing = [s for s in tracker["signals"]
-                if s["ticker"] == ticker and s["signal_date"] == today]
-    if existing:
+
+    # No duplicates on same day
+    if any(s["ticker"] == ticker and s["signal_date"] == today for s in tracker["signals"]):
         return
 
     quote = get_current_quote(ticker)
@@ -59,148 +64,357 @@ def log_signal(recommendation: dict) -> None:
     if entry_price <= 0:
         return
 
+    # Also record SPY price at signal time for paired comparison
+    spy_quote = get_current_quote("SPY")
+    spy_entry = spy_quote.get("price", 0)
+
     signal_record = {
         "ticker": ticker,
         "action": action,
         "signal_date": today,
         "entry_price": entry_price,
+        "spy_entry_price": spy_entry,
         "composite_score": recommendation.get("composite_score", 0),
         "confidence": recommendation.get("confidence", 0),
-        "thesis": recommendation.get("thesis", ""),
-        "checkpoints": {
-            "5d": {"date": None, "price": None, "return_pct": None, "checked": False},
-            "10d": {"date": None, "price": None, "return_pct": None, "checked": False},
-            "20d": {"date": None, "price": None, "return_pct": None, "checked": False},
-        },
+        "thesis": recommendation.get("thesis", "")[:200],
+        "checkpoints": {},
     }
 
+    for horizon in _HORIZONS:
+        signal_record["checkpoints"][horizon] = {
+            "checked": False,
+            "stock_price": None,
+            "stock_return_pct": None,
+            "spy_price": None,
+            "spy_return_pct": None,
+            "excess_vs_spy": None,
+            "date": None,
+        }
+
     tracker["signals"].append(signal_record)
-    # Keep last 500 signals max
     tracker["signals"] = tracker["signals"][-500:]
     _save_tracker(tracker)
-    logger.info("Tracked signal: %s %s at $%.2f (score: %.1f)",
-                action, ticker, entry_price, recommendation.get("composite_score", 0))
+    logger.info("Tracked signal: %s %s at $%.2f (SPY: $%.2f)", action, ticker, entry_price, spy_entry)
 
 
 def check_signal_outcomes() -> dict:
-    """Check prices for signals that have reached their 5/10/20 day checkpoints.
-
-    Returns summary of newly resolved checkpoints.
-    """
+    """Check prices for signals that have reached their checkpoint horizons."""
     tracker = _load_tracker()
     today = datetime.now()
-    newly_resolved = {"5d": 0, "10d": 0, "20d": 0}
+    newly_resolved = {h: 0 for h in _HORIZONS}
 
     for signal in tracker["signals"]:
         signal_date = datetime.strptime(signal["signal_date"], "%Y-%m-%d")
         entry_price = signal["entry_price"]
+        spy_entry = signal.get("spy_entry_price", 0)
+
         if entry_price <= 0:
             continue
 
-        for period_key, trading_days in [("5d", 7), ("10d", 14), ("20d", 28)]:
-            checkpoint = signal["checkpoints"][period_key]
-            if checkpoint["checked"]:
+        for horizon, cal_days in _HORIZONS.items():
+            cp = signal["checkpoints"][horizon]
+            if cp["checked"]:
+                continue
+            if (today - signal_date).days < cal_days:
                 continue
 
-            # Check if enough calendar days have passed (trading_days is approximate)
-            days_since = (today - signal_date).days
-            if days_since < trading_days:
-                continue
-
-            # Get current price for this ticker
             try:
-                quote = get_current_quote(signal["ticker"])
-                current_price = quote.get("price", 0)
-                if current_price <= 0:
+                # Stock price
+                stock_quote = get_current_quote(signal["ticker"])
+                stock_price = stock_quote.get("price", 0)
+                if stock_price <= 0:
                     continue
 
-                return_pct = ((current_price - entry_price) / entry_price) * 100
-                checkpoint["date"] = today.strftime("%Y-%m-%d")
-                checkpoint["price"] = current_price
-                checkpoint["return_pct"] = round(return_pct, 2)
-                checkpoint["checked"] = True
-                newly_resolved[period_key] += 1
+                stock_return = ((stock_price - entry_price) / entry_price) * 100
 
-                logger.info(
-                    "Signal outcome: %s %s entry=$%.2f now=$%.2f %s-return=%.2f%%",
-                    signal["action"], signal["ticker"], entry_price,
-                    current_price, period_key, return_pct,
-                )
+                # SPY price for paired benchmark
+                spy_quote = get_current_quote("SPY")
+                spy_price = spy_quote.get("price", 0)
+                spy_return = ((spy_price - spy_entry) / spy_entry) * 100 if spy_entry > 0 else 0
+
+                excess = stock_return - spy_return
+
+                cp["checked"] = True
+                cp["stock_price"] = round(stock_price, 2)
+                cp["stock_return_pct"] = round(stock_return, 2)
+                cp["spy_price"] = round(spy_price, 2)
+                cp["spy_return_pct"] = round(spy_return, 2)
+                cp["excess_vs_spy"] = round(excess, 2)
+                cp["date"] = today.strftime("%Y-%m-%d")
+
+                newly_resolved[horizon] += 1
             except Exception:
                 continue
 
-    # Recompute aggregate stats
+    # Recompute stats and validation
     tracker["stats"] = _compute_stats(tracker["signals"])
+    tracker["validation"] = _run_validation_tests(tracker["signals"])
     _save_tracker(tracker)
     return newly_resolved
 
 
 def _compute_stats(signals: list) -> dict:
-    """Compute aggregate performance statistics."""
+    """Compute aggregate stats per horizon and action type."""
     stats = {}
-
-    for period_key in ["5d", "10d", "20d"]:
-        resolved = [s for s in signals if s["checkpoints"][period_key]["checked"]]
+    for horizon in _HORIZONS:
+        resolved = [s for s in signals if s["checkpoints"][horizon]["checked"]]
         if not resolved:
-            stats[period_key] = {"count": 0, "avg_return": 0, "hit_rate": 0, "avg_win": 0, "avg_loss": 0}
+            stats[horizon] = {"count": 0}
             continue
 
-        returns = [s["checkpoints"][period_key]["return_pct"] for s in resolved]
-        winners = [r for r in returns if r > 0]
-        losers = [r for r in returns if r <= 0]
+        returns = [s["checkpoints"][horizon]["stock_return_pct"] for s in resolved]
+        excess = [s["checkpoints"][horizon]["excess_vs_spy"] for s in resolved
+                  if s["checkpoints"][horizon]["excess_vs_spy"] is not None]
 
-        stats[period_key] = {
+        winners = [r for r in returns if r > 0]
+        excess_winners = [e for e in excess if e > 0]
+
+        stats[horizon] = {
             "count": len(resolved),
-            "avg_return": round(sum(returns) / len(returns), 2),
+            "avg_return": round(np.mean(returns), 2),
+            "median_return": round(np.median(returns), 2),
             "hit_rate": round(len(winners) / len(resolved) * 100, 1),
-            "avg_win": round(sum(winners) / len(winners), 2) if winners else 0,
-            "avg_loss": round(sum(losers) / len(losers), 2) if losers else 0,
-            "best": round(max(returns), 2),
-            "worst": round(min(returns), 2),
+            "avg_excess_vs_spy": round(np.mean(excess), 2) if excess else 0,
+            "relative_hit_rate": round(len(excess_winners) / len(excess) * 100, 1) if excess else 0,
         }
 
-        # Stats by action type
+        # By action type
         for action in ["BUY", "WATCHLIST"]:
-            action_resolved = [s for s in resolved if s["action"] == action]
-            if action_resolved:
-                action_returns = [s["checkpoints"][period_key]["return_pct"] for s in action_resolved]
+            action_signals = [s for s in resolved if s["action"] == action]
+            if action_signals:
+                action_returns = [s["checkpoints"][horizon]["stock_return_pct"] for s in action_signals]
+                action_excess = [s["checkpoints"][horizon]["excess_vs_spy"] for s in action_signals
+                                 if s["checkpoints"][horizon]["excess_vs_spy"] is not None]
                 action_winners = [r for r in action_returns if r > 0]
-                stats[f"{period_key}_{action.lower()}"] = {
-                    "count": len(action_resolved),
-                    "avg_return": round(sum(action_returns) / len(action_returns), 2),
-                    "hit_rate": round(len(action_winners) / len(action_resolved) * 100, 1),
+
+                stats[f"{horizon}_{action.lower()}"] = {
+                    "count": len(action_signals),
+                    "avg_return": round(np.mean(action_returns), 2),
+                    "avg_excess": round(np.mean(action_excess), 2) if action_excess else 0,
+                    "hit_rate": round(len(action_winners) / len(action_signals) * 100, 1),
+                    "distinct_dates": len(set(s["signal_date"] for s in action_signals)),
                 }
 
     return stats
 
 
+def _run_validation_tests(signals: list) -> dict:
+    """Run the expert's statistical test battery.
+
+    Only runs when there are enough resolved signals.
+    Primary: BUY, 10d, excess vs SPY.
+    """
+    validation = {"status": "collecting", "tests": {}}
+
+    # Get BUY signals with resolved 10d checkpoints
+    buy_10d = [s for s in signals
+               if s["action"] == "BUY"
+               and s["checkpoints"]["10d"]["checked"]
+               and s["checkpoints"]["10d"]["excess_vs_spy"] is not None]
+
+    watchlist_10d = [s for s in signals
+                     if s["action"] == "WATCHLIST"
+                     and s["checkpoints"]["10d"]["checked"]
+                     and s["checkpoints"]["10d"]["excess_vs_spy"] is not None]
+
+    n_buy = len(buy_10d)
+    n_watchlist = len(watchlist_10d)
+    distinct_dates = len(set(s["signal_date"] for s in buy_10d))
+
+    validation["sample_size"] = {
+        "buy_signals": n_buy,
+        "watchlist_signals": n_watchlist,
+        "distinct_buy_dates": distinct_dates,
+        "phase": "pilot" if n_buy < 75 else ("meaningful" if n_buy < 150 else ("serious" if n_buy < 250 else "validated")),
+    }
+
+    if n_buy < 10:
+        validation["status"] = "insufficient_data"
+        return validation
+
+    buy_excess = np.array([s["checkpoints"]["10d"]["excess_vs_spy"] for s in buy_10d])
+
+    # A. Paired t-test: is mean excess return > 0?
+    t_stat, t_pval = scipy_stats.ttest_1samp(buy_excess, 0)
+    # One-sided: we want mean > 0
+    t_pval_onesided = t_pval / 2 if t_stat > 0 else 1 - t_pval / 2
+    validation["tests"]["paired_t"] = {
+        "mean_excess": round(float(np.mean(buy_excess)), 3),
+        "t_statistic": round(float(t_stat), 3),
+        "p_value_one_sided": round(float(t_pval_onesided), 4),
+        "significant_at_05": t_pval_onesided < 0.05,
+    }
+
+    # B. Wilcoxon signed-rank test
+    try:
+        # Remove zeros for Wilcoxon
+        nonzero = buy_excess[buy_excess != 0]
+        if len(nonzero) >= 10:
+            w_stat, w_pval = scipy_stats.wilcoxon(nonzero, alternative="greater")
+            validation["tests"]["wilcoxon"] = {
+                "w_statistic": round(float(w_stat), 3),
+                "p_value": round(float(w_pval), 4),
+                "significant_at_05": w_pval < 0.05,
+            }
+    except Exception:
+        pass
+
+    # C. Exact binomial test on relative hit rate
+    hits = int(np.sum(buy_excess > 0))
+    binom_result = scipy_stats.binomtest(hits, n_buy, 0.5, alternative="greater")
+    # Wilson confidence interval
+    z = 1.96
+    p_hat = hits / n_buy
+    denom = 1 + z**2 / n_buy
+    center = (p_hat + z**2 / (2 * n_buy)) / denom
+    margin = z * math.sqrt((p_hat * (1 - p_hat) + z**2 / (4 * n_buy)) / n_buy) / denom
+    wilson_lower = max(0, center - margin)
+    wilson_upper = min(1, center + margin)
+
+    validation["tests"]["binomial_hit_rate"] = {
+        "hits": hits,
+        "total": n_buy,
+        "hit_rate": round(hits / n_buy * 100, 1),
+        "p_value": round(float(binom_result.pvalue), 4),
+        "wilson_95_ci": [round(wilson_lower * 100, 1), round(wilson_upper * 100, 1)],
+        "wilson_lower_above_50": wilson_lower > 0.50,
+    }
+
+    # D. Bootstrap 95% CI for mean excess return
+    rng = np.random.default_rng(42)
+    n_boot = 10000
+    boot_means = np.array([
+        np.mean(rng.choice(buy_excess, size=n_buy, replace=True))
+        for _ in range(n_boot)
+    ])
+    ci_lower, ci_upper = np.percentile(boot_means, [2.5, 97.5])
+    validation["tests"]["bootstrap"] = {
+        "mean_excess": round(float(np.mean(buy_excess)), 3),
+        "ci_95_lower": round(float(ci_lower), 3),
+        "ci_95_upper": round(float(ci_upper), 3),
+        "ci_above_zero": ci_lower > 0,
+    }
+
+    # F. BUY vs WATCHLIST separation (if enough WATCHLIST data)
+    if n_watchlist >= 10:
+        wl_excess = np.array([s["checkpoints"]["10d"]["excess_vs_spy"] for s in watchlist_10d])
+        t2_stat, t2_pval = scipy_stats.ttest_ind(buy_excess, wl_excess, alternative="greater")
+
+        validation["tests"]["buy_vs_watchlist"] = {
+            "buy_mean": round(float(np.mean(buy_excess)), 3),
+            "watchlist_mean": round(float(np.mean(wl_excess)), 3),
+            "difference": round(float(np.mean(buy_excess) - np.mean(wl_excess)), 3),
+            "t_statistic": round(float(t2_stat), 3),
+            "p_value": round(float(t2_pval), 4),
+            "monotonic": float(np.mean(buy_excess)) > float(np.mean(wl_excess)),
+        }
+
+    # Overall verdict
+    mean_excess = float(np.mean(buy_excess))
+    hit_rate = hits / n_buy
+
+    if n_buy >= 100:
+        passing = (
+            mean_excess > 0.75
+            and hit_rate >= 0.55
+            and wilson_lower > 0.50
+            and (ci_lower > 0 if n_buy >= 75 else True)
+        )
+        validation["status"] = "working" if passing else "needs_calibration"
+        validation["verdict"] = {
+            "mean_excess_above_075": mean_excess > 0.75,
+            "hit_rate_above_55": hit_rate >= 0.55,
+            "wilson_lower_above_50": wilson_lower > 0.50,
+            "bootstrap_ci_above_0": ci_lower > 0,
+        }
+    else:
+        validation["status"] = "collecting"
+
+    return validation
+
+
 def get_performance_report() -> str:
-    """Generate a markdown performance report."""
+    """Generate markdown performance report with statistical tests."""
     tracker = _load_tracker()
     stats = tracker.get("stats", {})
+    validation = tracker.get("validation", {})
     total_signals = len(tracker.get("signals", []))
 
     lines = [
         "## Signal Performance Tracker",
         "",
         f"**Total signals tracked:** {total_signals}",
-        "",
     ]
 
-    if not stats:
-        lines.append("*No performance data yet. Signals need 5+ trading days to produce results.*")
-        return "\n".join(lines)
+    sample = validation.get("sample_size", {})
+    if sample:
+        lines.append(f"**Phase:** {sample.get('phase', 'collecting')} "
+                     f"({sample.get('buy_signals', 0)} BUY, "
+                     f"{sample.get('watchlist_signals', 0)} WATCHLIST, "
+                     f"{sample.get('distinct_buy_dates', 0)} distinct dates)")
+    lines.append("")
 
-    lines.append("| Period | Signals | Avg Return | Hit Rate | Avg Win | Avg Loss |")
-    lines.append("|--------|---------|-----------|----------|---------|----------|")
+    # Stats table
+    if stats:
+        lines.append("| Period | Signals | Avg Return | Avg Excess vs SPY | Hit Rate | Rel Hit Rate |")
+        lines.append("|--------|---------|-----------|-------------------|----------|-------------|")
+        for horizon in ["5d", "10d", "20d"]:
+            s = stats.get(horizon, {})
+            if s.get("count", 0) > 0:
+                lines.append(
+                    f"| {horizon} | {s['count']} | {s['avg_return']:+.2f}% | "
+                    f"{s.get('avg_excess_vs_spy', 0):+.2f}% | "
+                    f"{s['hit_rate']:.0f}% | {s.get('relative_hit_rate', 0):.0f}% |"
+                )
+        lines.append("")
 
-    for period_key in ["5d", "10d", "20d"]:
-        s = stats.get(period_key, {})
-        if s.get("count", 0) > 0:
-            lines.append(
-                f"| {period_key} | {s['count']} | {s['avg_return']:+.2f}% | "
-                f"{s['hit_rate']:.0f}% | {s.get('avg_win', 0):+.2f}% | {s.get('avg_loss', 0):.2f}% |"
-            )
+    # Validation tests
+    tests = validation.get("tests", {})
+    if tests:
+        lines.append("### Statistical Validation (Primary: BUY 10d vs SPY)")
+        lines.append("")
+
+        t_test = tests.get("paired_t", {})
+        if t_test:
+            sig = "Yes" if t_test.get("significant_at_05") else "No"
+            lines.append(f"- **Paired t-test:** mean excess = {t_test.get('mean_excess', 0):+.3f}%, "
+                        f"t = {t_test.get('t_statistic', 0):.2f}, "
+                        f"p = {t_test.get('p_value_one_sided', 1):.4f} (sig: {sig})")
+
+        binom = tests.get("binomial_hit_rate", {})
+        if binom:
+            ci = binom.get("wilson_95_ci", [0, 0])
+            lines.append(f"- **Hit rate:** {binom.get('hits', 0)}/{binom.get('total', 0)} = "
+                        f"{binom.get('hit_rate', 0):.1f}%, "
+                        f"Wilson 95% CI: [{ci[0]:.1f}%, {ci[1]:.1f}%]")
+
+        boot = tests.get("bootstrap", {})
+        if boot:
+            above = "above" if boot.get("ci_above_zero") else "straddles"
+            lines.append(f"- **Bootstrap 95% CI:** [{boot.get('ci_95_lower', 0):+.3f}%, "
+                        f"{boot.get('ci_95_upper', 0):+.3f}%] ({above} zero)")
+
+        bvw = tests.get("buy_vs_watchlist", {})
+        if bvw:
+            mono = "Yes (monotonic)" if bvw.get("monotonic") else "No"
+            lines.append(f"- **BUY vs WATCHLIST:** BUY {bvw.get('buy_mean', 0):+.3f}% vs "
+                        f"WL {bvw.get('watchlist_mean', 0):+.3f}% "
+                        f"(diff: {bvw.get('difference', 0):+.3f}%, {mono})")
+        lines.append("")
+
+    # Verdict
+    status = validation.get("status", "collecting")
+    if status == "working":
+        lines.append("**Verdict: MODEL IS WORKING**")
+    elif status == "needs_calibration":
+        lines.append("**Verdict: NEEDS CALIBRATION** -- not meeting expert thresholds")
+        verdict = validation.get("verdict", {})
+        for k, v in verdict.items():
+            lines.append(f"  - {k}: {'PASS' if v else 'FAIL'}")
+    elif status == "insufficient_data":
+        lines.append("*Insufficient data. Need 10+ resolved BUY signals to begin testing.*")
+    else:
+        lines.append("*Collecting data. Statistical tests run after 10+ BUY signals resolve.*")
 
     # Recent signals
     recent = tracker.get("signals", [])[-10:]
@@ -209,15 +423,21 @@ def get_performance_report() -> str:
         lines.append("| Date | Ticker | Action | Entry | Score | 5d | 10d | 20d |")
         lines.append("|------|--------|--------|-------|-------|-----|------|------|")
         for s in reversed(recent):
-            cp5 = s["checkpoints"]["5d"]
-            cp10 = s["checkpoints"]["10d"]
-            cp20 = s["checkpoints"]["20d"]
-            r5 = f"{cp5['return_pct']:+.1f}%" if cp5["checked"] else "..."
-            r10 = f"{cp10['return_pct']:+.1f}%" if cp10["checked"] else "..."
-            r20 = f"{cp20['return_pct']:+.1f}%" if cp20["checked"] else "..."
+            vals = []
+            for h in ["5d", "10d", "20d"]:
+                cp = s["checkpoints"].get(h, {})
+                if cp.get("checked"):
+                    excess = cp.get("excess_vs_spy")
+                    if excess is not None:
+                        vals.append(f"{excess:+.1f}%")
+                    else:
+                        vals.append(f"{cp.get('stock_return_pct', 0):+.1f}%")
+                else:
+                    vals.append("...")
             lines.append(
                 f"| {s['signal_date']} | {s['ticker']} | {s['action']} | "
-                f"${s['entry_price']:.2f} | {s['composite_score']:+.1f} | {r5} | {r10} | {r20} |"
+                f"${s['entry_price']:.2f} | {s['composite_score']:+.1f} | "
+                f"{vals[0]} | {vals[1]} | {vals[2]} |"
             )
 
     return "\n".join(lines)
@@ -247,17 +467,14 @@ def review_signals() -> dict:
         if count == 0:
             periods[old_key] = {"reviewed": 0}
         else:
-            avg_win = s.get("avg_win", 0)
-            avg_loss = abs(s.get("avg_loss", 0))
+            avg_return = s.get("avg_return", 0)
+            hit_rate = s.get("hit_rate", 0)
             periods[old_key] = {
                 "reviewed": count,
-                "hit_rate": s.get("hit_rate", 0),
-                "avg_return": s.get("avg_return", 0),
-                "avg_win": avg_win,
-                "avg_loss": avg_loss,
-                "profit_factor": round(avg_win / avg_loss, 2) if avg_loss > 0 else 0,
-                "best": s.get("best", 0),
-                "worst": s.get("worst", 0),
+                "hit_rate": hit_rate,
+                "avg_return": avg_return,
+                "avg_excess_vs_spy": s.get("avg_excess_vs_spy", 0),
+                "relative_hit_rate": s.get("relative_hit_rate", 0),
             }
 
     return {"total_signals": total, "periods": periods}
