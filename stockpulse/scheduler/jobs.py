@@ -55,6 +55,12 @@ def eod_recap_job():
         recommendations = run_watchlist_scan(tickers) if tickers else run_full_scan()
         report_path = generate_eod_report(recommendations)
         logger.info("EOD recap complete. Report: %s", report_path)
+
+        # Review past signal performance
+        from stockpulse.research.tracker import review_signals
+        perf = review_signals()
+        if perf.get("total_signals", 0) > 0:
+            logger.info("Signal performance: %s", perf)
     except Exception:
         logger.exception("EOD recap failed")
 
@@ -82,3 +88,16 @@ def portfolio_check_job():
         dispatch_portfolio_alerts()
     except Exception:
         logger.exception("Portfolio check failed")
+
+
+def signal_tracking_job():
+    """Check outcomes for tracked signals that have reached their checkpoint days."""
+    logger.info("--- Signal tracking check ---")
+    try:
+        from stockpulse.research.tracker import check_signal_outcomes
+        results = check_signal_outcomes()
+        total = sum(results.values())
+        if total > 0:
+            logger.info("Signal outcomes resolved: %s", results)
+    except Exception:
+        logger.exception("Signal tracking check failed")

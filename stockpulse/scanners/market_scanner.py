@@ -32,6 +32,9 @@ def run_full_scan(tickers: list[str] | None = None) -> list[dict]:
     # Auto-discover: add tickers crossing WATCHLIST threshold to discovered list
     _update_discovered(ranked)
 
+    # Track BUY/WATCHLIST signals for performance measurement
+    _track_signals(ranked)
+
     return ranked
 
 def run_watchlist_scan(tickers: list[str]) -> list[dict]:
@@ -112,3 +115,14 @@ def _update_discovered(ranked: list[dict]) -> None:
             logger.info("Auto-discovered %d new tickers: %s", len(new_discoveries), new_discoveries)
     except Exception:
         logger.exception("Failed to update discovered watchlist")
+
+
+def _track_signals(ranked: list[dict]) -> None:
+    """Log BUY/WATCHLIST signals for performance tracking."""
+    try:
+        from stockpulse.research.tracker import log_signal
+        for rec in ranked:
+            if rec.get("action") in ("BUY", "WATCHLIST"):
+                log_signal(rec)
+    except Exception:
+        logger.debug("Signal tracking failed")

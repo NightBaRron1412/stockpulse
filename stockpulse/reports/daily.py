@@ -80,6 +80,16 @@ def generate_morning_report(recommendations: list[dict]) -> str:
             lines.extend([f"### {r['ticker']} -- SELL (confidence: {r['confidence']}%)",
                 f"- **Thesis:** {r['thesis']}", f"- **Technical:** {r['technical_summary']}",
                 f"- **Invalidation:** {r['invalidation']}", ""])
+    # Signal performance section
+    try:
+        from stockpulse.research.tracker import get_performance_report
+        perf_lines = get_performance_report()
+        if perf_lines:
+            lines.append("")
+            lines.append(perf_lines)
+            lines.append("")
+    except Exception:
+        pass
     portfolio_lines, portfolio_data = _generate_portfolio_section()
     if portfolio_lines:
         lines.extend(portfolio_lines)
@@ -107,6 +117,16 @@ def generate_eod_report(recommendations: list[dict]) -> str:
     for r in sorted(recommendations, key=lambda x: abs(x["composite_score"]), reverse=True)[:20]:
         lines.append(f"| {r['ticker']} | {r['action']} | {r['confidence']}% | {r['composite_score']:.1f} |")
     lines.append("")
+    # Signal performance section
+    try:
+        from stockpulse.research.tracker import get_performance_report
+        perf_lines = get_performance_report()
+        if perf_lines:
+            lines.append("")
+            lines.append(perf_lines)
+            lines.append("")
+    except Exception:
+        pass
     portfolio_lines, portfolio_data = _generate_portfolio_section()
     if portfolio_lines:
         lines.extend(portfolio_lines)

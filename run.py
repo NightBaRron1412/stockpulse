@@ -67,6 +67,13 @@ def run_scheduler():
         id="portfolio_check",
         name="Portfolio Check",
     )
+    from stockpulse.scheduler.jobs import signal_tracking_job
+    scheduler.add_job(
+        signal_tracking_job,
+        CronTrigger(hour="17", minute="0", day_of_week="mon-fri", timezone=tz),
+        id="signal_tracking",
+        name="Signal Performance Check",
+    )
     logging.info("StockPulse scheduler started with %d jobs:", len(scheduler.get_jobs()))
     for job in scheduler.get_jobs():
         logging.info("  - %s: %s", job.name, job.trigger)
@@ -78,8 +85,8 @@ def run_scheduler():
 
 def main():
     parser = argparse.ArgumentParser(description="StockPulse -- Stock Research & Alert System")
-    parser.add_argument("mode", choices=["scan", "schedule", "backtest"],
-        help="scan: one-shot scan | schedule: start scheduler | backtest: run backtest")
+    parser.add_argument("mode", choices=["scan", "schedule", "backtest", "performance"],
+        help="scan: one-shot scan | schedule: start scheduler | backtest: run backtest | performance: signal performance report")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument("--start", help="Backtest start date (YYYY-MM-DD)")
     parser.add_argument("--end", help="Backtest end date (YYYY-MM-DD)")
@@ -92,6 +99,16 @@ def main():
     elif args.mode == "backtest":
         from stockpulse.backtests.runner import run_backtest
         run_backtest(start_date=args.start, end_date=args.end)
+    elif args.mode == "performance":
+        from stockpulse.research.tracker import generate_performance_report, review_signals
+        summary = review_signals()
+        path = generate_performance_report()
+        print(f"Signal performance report: {path}")
+        print(f"Total signals tracked: {summary['total_signals']}")
+        for period_key in ["day_5", "day_10", "day_20"]:
+            p = summary["periods"].get(period_key, {})
+            if p.get("reviewed", 0) > 0:
+                print(f"  {period_key}: hit_rate={p['hit_rate']}% avg_return={p['avg_return']:+.2f}% profit_factor={p['profit_factor']:.2f}")
 
 if __name__ == "__main__":
     main()
