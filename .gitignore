@@ -7,3 +7,9 @@ backtests/results/
 *.egg-info/
 .cache/
 logs/
+.DS_Store
+*.swp
+*.swo
+*~
+dist/
+build/

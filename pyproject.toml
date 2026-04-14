@@ -2,6 +2,17 @@
 name = "stockpulse"
 version = "0.1.0"
 description = "Local stock research and alert system"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Amir Shetaia"}]
+keywords = ["stocks", "trading", "scanner", "signals", "research", "alerts"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 requires-python = ">=3.12"
 dependencies = [
     "lumibot>=3.0",
@@ -23,6 +34,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-mock>=3.14"]
+
+[project.urls]
+Homepage = "https://github.com/amirshetaia/stockpulse"
+
+[project.scripts]
+stockpulse = "run:main"
 
 [tool.setuptools.packages.find]
 include = ["stockpulse*"]
