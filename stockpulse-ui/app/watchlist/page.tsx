@@ -195,7 +195,7 @@ export default function WatchlistPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleRemove(rec.ticker); }}
                           disabled={removing === rec.ticker}
-                          className="text-slate-600 hover:text-red-400 transition-colors cursor-pointer"
+                          className="p-1 rounded hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-colors cursor-pointer"
                           title={`Remove ${rec.ticker}`}
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
