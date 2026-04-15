@@ -317,7 +317,7 @@ export default function SettingsPage() {
     Object.entries(thresholds).map(([k, v]) => [k, String(v)])
   );
   const currentRisk = editedRisk ?? Object.fromEntries(
-    Object.entries(risk).map(([k, v]) => [k, String(v)])
+    Object.entries(risk).filter(([, v]) => typeof v !== "object" || v === null).map(([k, v]) => [k, String(v)])
   );
 
   return (
@@ -474,6 +474,21 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+        {/* Portfolio Size Tiers */}
+        {risk.portfolio_size_tiers && (
+          <div className="pt-3 mt-3 border-t border-slate-700/30">
+            <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Portfolio Size Tiers</p>
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              {Object.entries(risk.portfolio_size_tiers as Record<string, any>).map(([tier, vals]: [string, any]) => (
+                <div key={tier} className="glass-card p-2.5">
+                  <p className="text-slate-300 font-medium mb-1">{tier.replace(/_/g, " ")}</p>
+                  <p className="text-slate-500">Max position: {vals.max_position_pct}%</p>
+                  <p className="text-slate-500">Max positions: {vals.max_positions}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
