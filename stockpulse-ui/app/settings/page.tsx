@@ -10,6 +10,122 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { ScanStatus } from "@/lib/types";
 
+// ── Input type helpers ────────────────────────────────────────────────────────
+
+const BOOLEAN_KEYS = new Set([
+  "watchlist_starter_enabled",
+  "max_one_name_per_cluster",
+  "add_to_full_only_on_buy_upgrade",
+  "never_average_down_watchlist",
+]);
+
+const INTEGER_KEYS = new Set([
+  "max_positions",
+  "max_watchlist_names",
+  "drawdown_half",
+  "drawdown_pause",
+  "earnings_blackout_days",
+  "watchlist_exit_score",
+  "watchlist_timeout_days",
+  "buy",
+  "sell",
+  "watchlist",
+  "watchlist_relaxed",
+  "caution",
+  "exit",
+  "confidence_min",
+  "watchlist_starter_min_score",
+]);
+
+const FLOAT_KEYS = new Set([
+  "max_position_pct",
+  "max_sector_pct",
+  "risk_per_trade_pct",
+  "watchlist_starter_size",
+  "watchlist_starter_risk",
+  "max_watchlist_sleeve",
+]);
+
+type InputKind = "boolean" | "integer" | "float" | "text";
+
+function getInputType(key: string, value: unknown): { kind: InputKind; step?: number } {
+  if (
+    typeof value === "boolean" ||
+    BOOLEAN_KEYS.has(key) ||
+    key.includes("enabled") ||
+    key.startsWith("never_") ||
+    key.startsWith("add_to_") ||
+    key.startsWith("max_one_")
+  ) {
+    return { kind: "boolean" };
+  }
+  if (INTEGER_KEYS.has(key)) {
+    return { kind: "integer", step: 1 };
+  }
+  if (FLOAT_KEYS.has(key)) {
+    return { kind: "float", step: 0.01 };
+  }
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? { kind: "integer", step: 1 } : { kind: "float", step: 0.01 };
+  }
+  return { kind: "text" };
+}
+
+function renderEditableField(
+  key: string,
+  val: string,
+  originalValue: unknown,
+  onChange: (key: string, val: string) => void
+) {
+  const { kind, step } = getInputType(key, originalValue);
+
+  if (kind === "boolean") {
+    return (
+      <select
+        value={val}
+        onChange={(e) => onChange(key, e.target.value)}
+        className="bg-slate-800/50 border border-slate-700/50 h-8 text-sm font-mono-data rounded-md px-2 text-slate-200 w-20"
+      >
+        <option value="true">Yes</option>
+        <option value="false">No</option>
+      </select>
+    );
+  }
+
+  return (
+    <Input
+      type="number"
+      step={step}
+      value={val}
+      onChange={(e) => onChange(key, e.target.value)}
+      className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24"
+    />
+  );
+}
+
+function DisplayValue({ name, val, originalValue }: { name: string; val: string; originalValue: unknown }) {
+  if (typeof originalValue === "boolean") {
+    return (
+      <span className={cn("font-mono-data text-sm", originalValue ? "text-green-400" : "text-slate-500")}>
+        {originalValue ? "Yes" : "No"}
+      </span>
+    );
+  }
+  // Detect boolean-like string values stored as strings
+  const { kind } = getInputType(name, originalValue);
+  if (kind === "boolean" && (val === "true" || val === "false")) {
+    const isTrue = val === "true";
+    return (
+      <span className={cn("font-mono-data text-sm", isTrue ? "text-green-400" : "text-slate-500")}>
+        {isTrue ? "Yes" : "No"}
+      </span>
+    );
+  }
+  return <p className="font-mono-data text-slate-200 text-sm">{val}</p>;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const { data: config, loading, error, refresh } = usePolling<any>(api.config, 60000);
   const { data: scanStatus, refresh: refreshScan } = usePolling<ScanStatus>(api.scanStatus, 5000);
@@ -239,9 +355,11 @@ export default function SettingsPage() {
             <div key={name} className="space-y-1">
               <p className="cursor-help text-xs text-slate-400" title={getThresholdDescription(name)}>{getThresholdLabel(name)}</p>
               {editingThresholds ? (
-                <Input value={val} onChange={(e) => setEditedThresholds({...currentThresholds, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
+                renderEditableField(name, val, thresholds[name], (key, newVal) =>
+                  setEditedThresholds({ ...currentThresholds, [key]: newVal })
+                )
               ) : (
-                <p className="font-mono-data text-slate-200 text-sm">{val}</p>
+                <DisplayValue name={name} val={val} originalValue={thresholds[name]} />
               )}
             </div>
           ))}
@@ -266,9 +384,11 @@ export default function SettingsPage() {
             <div key={name} className="space-y-1">
               <p className="cursor-help text-xs text-slate-400" title={getRiskDescription(name)}>{getRiskLabel(name)}</p>
               {editingRisk ? (
-                <Input value={val} onChange={(e) => setEditedRisk({...currentRisk, [name]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
+                renderEditableField(name, val, risk[name], (key, newVal) =>
+                  setEditedRisk({ ...currentRisk, [key]: newVal })
+                )
               ) : (
-                <p className="font-mono-data text-slate-200 text-sm">{val}</p>
+                <DisplayValue name={name} val={val} originalValue={risk[name]} />
               )}
             </div>
           ))}
@@ -286,17 +406,18 @@ export default function SettingsPage() {
                 for (const k of ["watchlist_starter_enabled","watchlist_starter_min_score","watchlist_starter_size","watchlist_starter_risk","max_watchlist_sleeve","max_watchlist_names","watchlist_exit_score","watchlist_timeout_days"]) {
                   vals[k] = String(allocation[k] ?? "");
                 }
-                setEditingAllocation(vals);
+                setEditedAllocation(vals);
+                setEditingAllocation(true);
               }} className="h-7 text-xs border-slate-700">Edit</Button>
             ) : (
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setEditingAllocation(null); }} className="h-7 text-xs border-slate-700">Cancel</Button>
-                <Button size="sm" onClick={() => { handleSaveConfig(); setEditingAllocation(false as any); }} disabled={saving} className="h-7 text-xs">Save</Button>
+                <Button variant="outline" size="sm" onClick={() => { setEditingAllocation(false); setEditedAllocation(null); }} className="h-7 text-xs border-slate-700">Cancel</Button>
+                <Button size="sm" onClick={() => { handleSaveConfig(); setEditingAllocation(false); }} disabled={saving} className="h-7 text-xs">Save</Button>
               </div>
             )}
           </div>
 
-          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Sizing & Limits</h3>
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Sizing &amp; Limits</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
             {[
               { key: "watchlist_starter_enabled", label: "Starter Enabled", desc: "Allow WATCHLIST starter positions" },
@@ -307,18 +428,22 @@ export default function SettingsPage() {
               { key: "max_watchlist_names", label: "Max Names", desc: "Maximum WATCHLIST starter positions" },
               { key: "watchlist_exit_score", label: "Exit Score", desc: "Exit starter if score drops below this" },
               { key: "watchlist_timeout_days", label: "Timeout Days", desc: "Auto-exit starter after this many days" },
-            ].map(({ key, label, desc }) => (
-              <div key={key} className="space-y-1">
-                <p className="cursor-help text-xs text-slate-400" title={desc}>{label}</p>
-                {editingAllocation ? (
-                  <Input value={editingAllocation[key] ?? ""} onChange={(e) => setEditedAllocation({...editingAllocation, [key]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24" />
-                ) : (
-                  <p className="font-mono-data text-slate-200 text-sm">
-                    {allocation[key] != null ? (typeof allocation[key] === "boolean" ? (allocation[key] ? "Yes" : "No") : String(allocation[key])) : "--"}
-                  </p>
-                )}
-              </div>
-            ))}
+            ].map(({ key, label, desc }) => {
+              const originalValue = allocation[key];
+              const currentVal = editedAllocation ? (editedAllocation[key] ?? String(originalValue ?? "")) : String(originalValue ?? "");
+              return (
+                <div key={key} className="space-y-1">
+                  <p className="cursor-help text-xs text-slate-400" title={desc}>{label}</p>
+                  {editingAllocation && editedAllocation ? (
+                    renderEditableField(key, currentVal, originalValue, (k, newVal) =>
+                      setEditedAllocation({ ...editedAllocation, [k]: newVal })
+                    )
+                  ) : (
+                    <DisplayValue name={key} val={currentVal} originalValue={originalValue} />
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <Separator className="my-4 bg-slate-700/50" />
@@ -344,15 +469,21 @@ export default function SettingsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Max 1 per cluster</span>
-              <span className="font-mono-data text-slate-300">{allocation.max_one_name_per_cluster ? "Yes" : "No"}</span>
+              <span className={cn("font-mono-data", allocation.max_one_name_per_cluster ? "text-green-400" : "text-slate-500")}>
+                {allocation.max_one_name_per_cluster ? "Yes" : "No"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Upgrade to full on BUY</span>
-              <span className="font-mono-data text-slate-300">{allocation.add_to_full_only_on_buy_upgrade ? "Yes" : "No"}</span>
+              <span className={cn("font-mono-data", allocation.add_to_full_only_on_buy_upgrade ? "text-green-400" : "text-slate-500")}>
+                {allocation.add_to_full_only_on_buy_upgrade ? "Yes" : "No"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Never average down</span>
-              <span className="font-mono-data text-slate-300">{allocation.never_average_down_watchlist ? "Yes" : "No"}</span>
+              <span className={cn("font-mono-data", allocation.never_average_down_watchlist ? "text-green-400" : "text-slate-500")}>
+                {allocation.never_average_down_watchlist ? "Yes" : "No"}
+              </span>
             </div>
           </div>
         </div>
@@ -408,7 +539,6 @@ export default function SettingsPage() {
                 setBtStatusLocal({ running: true, progress: "Starting..." });
                 try {
                   await api.triggerBacktest(btStartDate, btEndDate);
-                  // Poll for completion
                   const poll = setInterval(async () => {
                     const s = await api.backtestStatus();
                     setBtStatusLocal(s);
@@ -451,7 +581,7 @@ export default function SettingsPage() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
                   >
-                    View Tearsheet →
+                    View Tearsheet &rarr;
                   </a>
                 )}
               </div>
