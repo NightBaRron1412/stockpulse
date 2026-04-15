@@ -116,10 +116,27 @@ export interface AdvisorSuggestion {
   wash_sale_warning: boolean;
   persistence_count: number;
   is_new: boolean;
+  entry_timing?: { timing: "now" | "wait" | "limit"; reason: string; target_price?: number; confidence: number };
+  pattern_match?: { match_count: number; avg_return_5d: number; avg_return_10d: number; avg_return_20d: number; win_rate: number; best_case: string; worst_case: string };
+  regime?: string;
+}
+
+export interface MarketRegime {
+  regime: "trending" | "ranging" | "correcting" | "selling_off";
+  spy_price: number;
+  spy_ema20: number;
+  spy_sma50: number;
+  spy_sma200: number;
+  spy_adx: number;
+  spy_rsi: number;
+  spy_drawdown_pct: number;
+  vix_level: number;
+  confidence: number;
 }
 
 export interface AdvisorResponse {
   suggestions: AdvisorSuggestion[];
   last_run: string | null;
   scan_trigger: string | null;
+  regime?: MarketRegime;
 }

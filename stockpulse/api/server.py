@@ -146,7 +146,8 @@ def _get_scan_status() -> dict:
             for line in reversed(lines):
                 ts = line[:19] if len(line) >= 19 else ""
 
-                if ("Scan complete" in line or "Morning scan complete" in line) and not latest_complete_ts:
+                if ("Scan complete" in line or "Morning scan complete" in line
+                        or "Intraday:" in line or "executed successfully" in line) and not latest_complete_ts:
                     latest_complete_ts = ts
                     last_completed = ts
 

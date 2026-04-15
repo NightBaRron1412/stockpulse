@@ -165,3 +165,25 @@ portfolio_advisor:
   never_override_risk_caps: true
   taxable_account_show_tax_impact: true
   show_wash_sale_warning: true
+market_regime:
+  enabled: true
+  vix_high: 25
+  vix_extreme: 35
+  correction_threshold_pct: 5
+  regime_adjustments:
+    trending:
+      cash_reserve_mult: 1.0
+      buy_threshold_add: 0
+      starter_enabled: true
+    ranging:
+      cash_reserve_mult: 1.2
+      buy_threshold_add: 5
+      starter_enabled: true
+    correcting:
+      cash_reserve_mult: 1.5
+      buy_threshold_add: 10
+      starter_enabled: false
+    selling_off:
+      cash_reserve_mult: 2.0
+      buy_threshold_add: 20
+      starter_enabled: false

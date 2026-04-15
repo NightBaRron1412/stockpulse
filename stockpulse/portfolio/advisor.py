@@ -83,6 +83,9 @@ class AdvisorSuggestion:
     wash_sale_warning: bool = False
     persistence_count: int = 0
     is_new: bool = True
+    entry_timing: dict | None = None
+    pattern_match: dict | None = None
+    regime: str | None = None
 
     def __post_init__(self):
         if not self.hash:
@@ -776,6 +779,29 @@ def evaluate(recommendations: list[dict], scan_trigger: str = "manual") -> list[
     # Update persistence tracking
     state = _update_persistence(state, rec_map, ctx["held_tickers"], scan_trigger)
 
+    # Detect market regime
+    regime = None
+    try:
+        from stockpulse.signals.market_regime import detect_regime
+        regime = detect_regime()
+        if regime and regime.get("adjustment"):
+            adj = regime["adjustment"]
+            # Adjust cash reserve based on market conditions
+            config = dict(config)  # don't mutate original
+            base_reserve = config.get("cash_reserve_min", 0.12)
+            config["cash_reserve_min"] = base_reserve * adj.get("cash_reserve_mult", 1.0)
+    except Exception:
+        logger.debug("Market regime detection failed, using defaults")
+
+    # Record patterns for historical matching
+    try:
+        from stockpulse.research.patterns import record_pattern
+        for rec in recommendations:
+            if rec.get("action") in ("BUY", "WATCHLIST") and rec.get("signals"):
+                record_pattern(rec)
+    except Exception:
+        pass
+
     # 1. Risk actions
     risk_suggestions = _evaluate_risk_actions(ctx, rec_map, state, config)
 
@@ -785,11 +811,14 @@ def evaluate(recommendations: list[dict], scan_trigger: str = "manual") -> list[
         if s.suggestion_type in (SuggestionType.TRIM_CAUTION, SuggestionType.TRIM_CONCENTRATION)
     )
 
-    # 2. Deployment
+    # 2. Deployment (uses cash_available + freed_cash)
     deploy_suggestions = _evaluate_deployment(ctx, rec_map, state, config, freed_cash)
 
-    # 3. Watchlist
-    watchlist_suggestions = _evaluate_watchlist(ctx, rec_map, state, config)
+    # 3. Watchlist — chain cash: subtract what deployment already consumed
+    deployed_cash = sum(s.suggested_amount or 0 for s in deploy_suggestions)
+    ctx_for_wl = dict(ctx)
+    ctx_for_wl["cash_available"] = max(0, ctx["cash_available"] + freed_cash - deployed_cash)
+    watchlist_suggestions = _evaluate_watchlist(ctx_for_wl, rec_map, state, config)
 
     # 4. Near-misses (informational only, no dollar amounts)
     already_suggested = {s.ticker for s in risk_suggestions + deploy_suggestions + watchlist_suggestions}
@@ -798,6 +827,32 @@ def evaluate(recommendations: list[dict], scan_trigger: str = "manual") -> list[
     # Combine, sort by severity then type
     all_suggestions = risk_suggestions + deploy_suggestions + watchlist_suggestions + near_miss_suggestions
     all_suggestions.sort(key=lambda s: (_SEVERITY_ORDER.get(s.severity, 9), _TYPE_ORDER.get(s.suggestion_type, 9)))
+
+    # Add entry timing and pattern matching to actionable suggestions
+    for s in all_suggestions:
+        if s.severity in (Severity.URGENT, Severity.ACTIONABLE) and s.suggested_amount:
+            # Entry timing
+            try:
+                from stockpulse.portfolio.entry_timing import assess_entry_timing
+                from stockpulse.data.provider import get_price_history
+                df = get_price_history(s.ticker, period="6mo")
+                if not df.empty:
+                    s.entry_timing = assess_entry_timing(s.ticker, df, s.action)
+            except Exception:
+                pass
+
+            # Pattern matching
+            try:
+                from stockpulse.research.patterns import find_similar_patterns
+                rec = rec_map.get(s.ticker, {})
+                if rec.get("signals"):
+                    s.pattern_match = find_similar_patterns(s.ticker, rec["signals"])
+            except Exception:
+                pass
+
+        # Tag with regime
+        if regime:
+            s.regime = regime.get("regime")
 
     # Tax annotations
     all_suggestions = _add_tax_annotations(all_suggestions, ctx, config, state)
@@ -932,10 +987,18 @@ def generate_eod_plan(recommendations: list[dict]) -> dict:
 def get_latest_suggestions() -> dict:
     """Read current suggestions from state file."""
     state = _load_state()
+    # Get current regime
+    regime = None
+    try:
+        from stockpulse.signals.market_regime import detect_regime
+        regime = detect_regime()
+    except Exception:
+        pass
     return {
         "suggestions": state.get("current_suggestions", []),
         "last_run": state.get("last_run"),
         "scan_trigger": state.get("scan_trigger"),
+        "regime": regime,
     }
 
 

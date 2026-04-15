@@ -98,6 +98,32 @@ function SuggestionCard({ suggestion, onDismiss }: { suggestion: AdvisorSuggesti
         )}
       </div>
 
+      {/* Entry timing */}
+      {suggestion.entry_timing && (
+        <div className="flex items-center gap-2 pt-1">
+          <span className={cn("px-2 py-0.5 rounded text-[10px] font-medium border",
+            suggestion.entry_timing.timing === "now" ? "bg-green-500/10 text-green-400 border-green-500/25" :
+            suggestion.entry_timing.timing === "wait" ? "bg-amber-500/10 text-amber-400 border-amber-500/25" :
+            "bg-blue-500/10 text-blue-400 border-blue-500/25"
+          )}>
+            {suggestion.entry_timing.timing === "now" ? "Good Entry" : suggestion.entry_timing.timing === "wait" ? "Wait" : "Limit Order"}
+          </span>
+          <span className="text-[10px] text-slate-400">{suggestion.entry_timing.reason}</span>
+          {suggestion.entry_timing.target_price && (
+            <span className="text-[10px] font-mono-data text-slate-300">Target: ${suggestion.entry_timing.target_price}</span>
+          )}
+        </div>
+      )}
+
+      {/* Pattern match */}
+      {suggestion.pattern_match && (
+        <div className="pt-1 text-[10px] text-slate-400">
+          <span className="text-slate-300">{suggestion.pattern_match.match_count} similar setups</span>
+          {" "}— avg {suggestion.pattern_match.avg_return_10d >= 0 ? "+" : ""}{suggestion.pattern_match.avg_return_10d}% in 10d
+          {" "}({suggestion.pattern_match.win_rate}% win rate)
+        </div>
+      )}
+
       {(suggestion.tax_impact_note || suggestion.wash_sale_warning) && (
         <div className="flex flex-wrap gap-2 pt-1">
           {suggestion.tax_impact_note && (
@@ -157,18 +183,36 @@ export default function AdvisorPage() {
   }
 
   const suggestions = data?.suggestions ?? [];
+  const regime = data?.regime;
   const urgent = suggestions.filter((s) => s.severity === "urgent");
   const actionable = suggestions.filter((s) => s.severity === "actionable");
   const info = suggestions.filter((s) => s.severity === "info");
+
+  const REGIME_STYLES: Record<string, { label: string; color: string }> = {
+    trending: { label: "Trending", color: "bg-green-500/15 text-green-400 border-green-500/30" },
+    ranging: { label: "Ranging", color: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+    correcting: { label: "Correcting", color: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+    selling_off: { label: "Selling Off", color: "bg-red-500/15 text-red-400 border-red-500/30" },
+  };
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Portfolio Advisor</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold">Portfolio Advisor</h1>
+            {regime?.regime && (
+              <span className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border",
+                REGIME_STYLES[regime.regime]?.color || REGIME_STYLES.ranging.color)}>
+                {REGIME_STYLES[regime.regime]?.label || regime.regime}
+                {regime.vix_level > 0 && <span className="ml-1 opacity-60">VIX {regime.vix_level}</span>}
+              </span>
+            )}
+          </div>
           {data?.last_run && (
             <p className="text-xs text-slate-500 mt-1">
               Last evaluated: {new Date(data.last_run).toLocaleString()} ({data.scan_trigger})
+              {regime && regime.spy_price > 0 && ` | SPY $${regime.spy_price}`}
             </p>
           )}
         </div>
