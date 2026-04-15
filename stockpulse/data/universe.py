@@ -47,10 +47,12 @@ def get_full_universe() -> list[str]:
     user = get_user_watchlist()
     combined = list(dict.fromkeys(sp500 + user))
 
-    # Apply Shariah filter if enabled
+    # Apply Shariah filter if enabled — but always keep user watchlist tickers
     filters = load_strategies().get("filters", {})
     if filters.get("shariah_only", False):
         from stockpulse.filters.shariah import screen_universe
-        combined = screen_universe(combined)
+        user_set = set(user)
+        filtered = screen_universe([t for t in combined if t not in user_set])
+        combined = list(dict.fromkeys(user + filtered))
 
     return combined
