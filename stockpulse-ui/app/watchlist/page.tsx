@@ -29,6 +29,8 @@ export default function WatchlistPage() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<any>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const handleAdd = useCallback(async () => {
     const ticker = addTicker.trim().toUpperCase();
@@ -180,9 +182,22 @@ export default function WatchlistPage() {
                   <Fragment key={rec.ticker}>
                     <TableRow
                       className="border-slate-700/30 hover:bg-slate-800/30 cursor-pointer"
-                      onClick={() =>
-                        setExpandedTicker(expandedTicker === rec.ticker ? null : rec.ticker)
-                      }
+                      onClick={async () => {
+                        if (expandedTicker === rec.ticker) {
+                          setExpandedTicker(null);
+                          setExpandedDetail(null);
+                        } else {
+                          setExpandedTicker(rec.ticker);
+                          setExpandedDetail(null);
+                          setLoadingDetail(true);
+                          try {
+                            const detail = await api.watchlistTicker(rec.ticker);
+                            setExpandedDetail(detail);
+                          } catch {} finally {
+                            setLoadingDetail(false);
+                          }
+                        }
+                      }}
                     >
                       <TableCell><TickerLink ticker={rec.ticker} /></TableCell>
                       <TableCell>
@@ -240,7 +255,14 @@ export default function WatchlistPage() {
                     {expandedTicker === rec.ticker && (
                       <TableRow key={`${rec.ticker}-detail`} className="border-slate-700/30 bg-slate-800/20">
                         <TableCell colSpan={6} className="p-4">
-                          <SignalDetail rec={rec} />
+                          {loadingDetail ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-400 py-4">
+                              <span className="h-3 w-3 border-2 border-slate-500 border-t-slate-200 rounded-full animate-spin" />
+                              Loading detail...
+                            </div>
+                          ) : (
+                            <SignalDetail rec={expandedDetail || rec} />
+                          )}
                         </TableCell>
                       </TableRow>
                     )}
@@ -257,9 +279,52 @@ export default function WatchlistPage() {
 
 function SignalDetail({ rec }: { rec: Recommendation }) {
   const signals = Object.entries(rec.signals ?? {});
+  const inv = typeof rec.invalidation === "string" ? rec.invalidation : "";
+  const current = (rec as any).current_price;
+  const entryPrice = (rec as any).entry_price;
+  const timing = (rec as any).entry_timing;
+  const emaMatch = inv.match(/20 EMA[:\s(]*\$?([\d.]+)/);
+  const smaMatch = inv.match(/50 SMA[:\s(]*\$?([\d.]+)/);
+  const stopMatch = inv.match(/Stop:\s*\$?([\d.]+)/);
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-300">{rec.thesis}</p>
+
+      {/* Price levels */}
+      <div className="flex flex-wrap gap-4 text-xs py-2 px-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+        {current != null && current > 0 && (
+          <span className="font-mono-data">Current: <span className="text-slate-200 font-medium">${current.toFixed(2)}</span></span>
+        )}
+        {entryPrice != null && entryPrice > 0 && (
+          <span className="font-mono-data">Entry: <span className="text-green-400 font-medium">${entryPrice.toFixed(2)}</span></span>
+        )}
+        {emaMatch && (
+          <span className="font-mono-data">20 EMA: <span className="text-blue-400 font-medium">${parseFloat(emaMatch[1]).toFixed(2)}</span></span>
+        )}
+        {smaMatch && (
+          <span className="font-mono-data">50 SMA: <span className="text-amber-400 font-medium">${parseFloat(smaMatch[1]).toFixed(2)}</span></span>
+        )}
+        {stopMatch && (
+          <span className="font-mono-data">Stop: <span className="text-red-400 font-medium">${parseFloat(stopMatch[1]).toFixed(2)}</span></span>
+        )}
+        {current && stopMatch && (
+          <span className="font-mono-data text-slate-500">Risk: {(((current - parseFloat(stopMatch[1])) / current) * 100).toFixed(1)}%</span>
+        )}
+      </div>
+
+      {/* Entry timing */}
+      {timing && (
+        <p className={cn("text-[11px] font-medium",
+          timing.timing === "now" ? "text-green-400/80" :
+          timing.timing === "wait" ? "text-amber-400/80" : "text-blue-400/80"
+        )}>
+          {timing.timing === "now" ? "Good entry zone" :
+           timing.timing === "wait" ? "Wait for better entry" : "Consider limit order"}: {timing.reason}
+        </p>
+      )}
+
+      {/* Signal bars — fixed scale: score range is -100 to +100 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
         {signals.map(([name, sig]) => (
           <div key={name} className="flex items-center gap-2 text-xs">
@@ -272,7 +337,7 @@ function SignalDetail({ rec }: { rec: Recommendation }) {
                   "h-full rounded-full",
                   (sig.score ?? 0) >= 0 ? "score-bar-positive" : "score-bar-negative"
                 )}
-                style={{ width: `${Math.min(Math.abs(sig.score ?? 0) * 10, 100)}%` }}
+                style={{ width: `${Math.min(Math.abs(sig.score ?? 0), 100)}%` }}
               />
             </div>
             <span className="font-mono-data text-slate-300 w-8 text-right">{formatScore(sig.score ?? 0)}</span>
