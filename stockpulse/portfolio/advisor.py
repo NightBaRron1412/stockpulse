@@ -86,6 +86,9 @@ class AdvisorSuggestion:
     entry_timing: dict | None = None
     pattern_match: dict | None = None
     regime: str | None = None
+    current_price: float | None = None
+    entry_target: float | None = None
+    stop_price: float | None = None
 
     def __post_init__(self):
         if not self.hash:
@@ -828,8 +831,32 @@ def evaluate(recommendations: list[dict], scan_trigger: str = "manual") -> list[
     all_suggestions = risk_suggestions + deploy_suggestions + watchlist_suggestions + near_miss_suggestions
     all_suggestions.sort(key=lambda s: (_SEVERITY_ORDER.get(s.severity, 9), _TYPE_ORDER.get(s.suggestion_type, 9)))
 
-    # Add entry timing and pattern matching to actionable suggestions
+    # Add pricing, entry timing, and pattern matching to all suggestions
     for s in all_suggestions:
+        # Current price + stop price for all suggestions
+        try:
+            from stockpulse.data.provider import get_current_quote
+            quote = get_current_quote(s.ticker)
+            s.current_price = quote.get("price", 0) if quote else None
+        except Exception:
+            pass
+
+        # Entry target and stop from invalidation data
+        rec = rec_map.get(s.ticker, {})
+        inv = rec.get("invalidation", "")
+        if isinstance(inv, str) and "Stop:" in inv:
+            try:
+                stop_str = inv.split("Stop:")[1].split("|")[0].strip().replace("$", "").split(" ")[0]
+                s.stop_price = round(float(stop_str), 2)
+            except Exception:
+                pass
+
+        # Entry target from timing or EMA
+        if s.entry_timing and s.entry_timing.get("target_price"):
+            s.entry_target = s.entry_timing["target_price"]
+        elif s.current_price:
+            s.entry_target = s.current_price  # At market
+
         if s.severity in (Severity.URGENT, Severity.ACTIONABLE) and s.suggested_amount:
             # Entry timing
             try:
@@ -838,13 +865,14 @@ def evaluate(recommendations: list[dict], scan_trigger: str = "manual") -> list[
                 df = get_price_history(s.ticker, period="6mo")
                 if not df.empty:
                     s.entry_timing = assess_entry_timing(s.ticker, df, s.action)
+                    if s.entry_timing.get("target_price"):
+                        s.entry_target = s.entry_timing["target_price"]
             except Exception:
                 pass
 
             # Pattern matching
             try:
                 from stockpulse.research.patterns import find_similar_patterns
-                rec = rec_map.get(s.ticker, {})
                 if rec.get("signals"):
                     s.pattern_match = find_similar_patterns(s.ticker, rec["signals"])
             except Exception:

@@ -119,6 +119,9 @@ export interface AdvisorSuggestion {
   entry_timing?: { timing: "now" | "wait" | "limit"; reason: string; target_price?: number; confidence: number };
   pattern_match?: { match_count: number; avg_return_5d: number; avg_return_10d: number; avg_return_20d: number; win_rate: number; best_case: string; worst_case: string };
   regime?: string;
+  current_price?: number;
+  entry_target?: number;
+  stop_price?: number;
 }
 
 export interface MarketRegime {

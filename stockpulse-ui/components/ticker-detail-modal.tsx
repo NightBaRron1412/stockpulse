@@ -101,6 +101,51 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
                   <p className="text-sm text-slate-200 leading-relaxed">{data.thesis}</p>
                 </div>
 
+                {/* Price Levels */}
+                <div>
+                  <h3 className="text-xs text-slate-500 uppercase tracking-wider mb-2">Price Levels</h3>
+                  <div className="flex flex-wrap gap-4 text-xs py-2 px-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    {(data as any).current_price != null && (
+                      <span className="font-mono-data">
+                        Current: <span className="text-slate-200 font-medium">${(data as any).current_price?.toFixed?.(2) ?? "--"}</span>
+                      </span>
+                    )}
+                    {typeof data.invalidation === "string" && data.invalidation.includes("Stop:") && (() => {
+                      const match = data.invalidation.match(/Stop:\s*\$?([\d.]+)/);
+                      const stop = match ? parseFloat(match[1]) : null;
+                      const current = (data as any).current_price;
+                      return stop ? (
+                        <>
+                          <span className="font-mono-data">
+                            Stop: <span className="text-red-400 font-medium">${stop.toFixed(2)}</span>
+                          </span>
+                          {current && (
+                            <span className="font-mono-data text-slate-500">
+                              Risk: {(((current - stop) / current) * 100).toFixed(1)}%
+                            </span>
+                          )}
+                        </>
+                      ) : null;
+                    })()}
+                    {typeof data.invalidation === "string" && data.invalidation.includes("EMA") && (() => {
+                      const match = data.invalidation.match(/20 EMA \(\$([\d.]+)\)/);
+                      return match ? (
+                        <span className="font-mono-data">
+                          20 EMA: <span className="text-blue-400 font-medium">${parseFloat(match[1]).toFixed(2)}</span>
+                        </span>
+                      ) : null;
+                    })()}
+                    {typeof data.invalidation === "string" && data.invalidation.includes("50 SMA") && (() => {
+                      const match = data.invalidation.match(/50 SMA \(\$([\d.]+)\)/);
+                      return match ? (
+                        <span className="font-mono-data">
+                          50 SMA: <span className="text-amber-400 font-medium">${parseFloat(match[1]).toFixed(2)}</span>
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+
                 {/* Invalidation */}
                 {data.invalidation && (
                   <div>

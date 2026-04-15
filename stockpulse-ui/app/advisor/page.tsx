@@ -83,6 +83,32 @@ function SuggestionCard({ suggestion, onDismiss, onExecute }: {
         <p className="text-xs text-slate-400 leading-relaxed">{suggestion.details}</p>
       )}
 
+      {/* Price levels */}
+      {(suggestion.current_price || suggestion.entry_target || suggestion.stop_price) && (
+        <div className="flex flex-wrap gap-4 text-xs py-1.5 px-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+          {suggestion.current_price != null && (
+            <span className="font-mono-data">
+              Current: <span className="text-slate-200 font-medium">${suggestion.current_price.toFixed(2)}</span>
+            </span>
+          )}
+          {suggestion.entry_target != null && (
+            <span className="font-mono-data">
+              Entry: <span className="text-blue-400 font-medium">${suggestion.entry_target.toFixed(2)}</span>
+            </span>
+          )}
+          {suggestion.stop_price != null && (
+            <span className="font-mono-data">
+              Stop: <span className="text-red-400 font-medium">${suggestion.stop_price.toFixed(2)}</span>
+            </span>
+          )}
+          {suggestion.current_price && suggestion.stop_price && (
+            <span className="font-mono-data text-slate-500">
+              Risk: {(((suggestion.current_price - suggestion.stop_price) / suggestion.current_price) * 100).toFixed(1)}%
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3 text-xs text-slate-500">
         {suggestion.score !== 0 && (
           <span className="font-mono-data">

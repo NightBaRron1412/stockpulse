@@ -252,12 +252,20 @@ def get_watchlist():
 
 @app.get("/api/watchlist/{ticker}")
 def get_watchlist_ticker(ticker: str):
-    from stockpulse.data.provider import get_price_history
+    from stockpulse.data.provider import get_price_history, get_current_quote
     from stockpulse.research.recommendation import generate_recommendation
-    df = get_price_history(ticker.upper(), period="1y")
+    t = ticker.upper()
+    df = get_price_history(t, period="1y")
     if df.empty:
         raise HTTPException(404, f"No data for {ticker}")
-    return generate_recommendation(ticker.upper(), df)
+    result = generate_recommendation(t, df)
+    # Add current price
+    try:
+        quote = get_current_quote(t)
+        result["current_price"] = quote.get("price", 0)
+    except Exception:
+        pass
+    return result
 
 
 # ═══════════════════════════════════════════════════
