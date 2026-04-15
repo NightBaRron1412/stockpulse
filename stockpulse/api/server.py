@@ -297,6 +297,229 @@ def update_cash(data: dict):
 
 
 # ═══════════════════════════════════════════════════
+# Portfolio Import & Manual Edit
+# ═══════════════════════════════════════════════════
+
+_TICKER_ALIASES = {"GOLD": "GLD"}  # Wealthsimple gold → GLD proxy
+
+
+def _parse_wealthsimple_text(text: str) -> list[dict]:
+    """Parse pasted Wealthsimple portfolio text into positions.
+
+    Wealthsimple format per position block:
+      TICKER
+      Company Name
+      Account Tag
+      $VALUE CURRENCY    <- total value of position
+      QUANTITY shares/ounces
+      ... return lines ...
+      $PRICE CURRENCY    <- per-share price
+      ... price change ...
+      Buy
+      Sell
+    """
+    import re
+    lines = text.strip().split("\n")
+    positions = []
+
+    # Find all ticker positions by looking for "Buy\nSell" markers
+    # and working backwards to find the ticker
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Look for standalone ticker (all caps, 1-5 chars)
+        ticker_match = re.match(r'^([A-Z]{1,5})$', line)
+        if not ticker_match:
+            i += 1
+            continue
+
+        ticker = ticker_match.group(1)
+        # Skip if it's "Buy" or "Sell" or common non-ticker words
+        if ticker in ("Buy", "Sell", "USD", "CAD", "ETF"):
+            i += 1
+            continue
+
+        ticker = _TICKER_ALIASES.get(ticker, ticker)
+
+        # Collect all lines until next standalone ticker or end
+        block_lines = []
+        j = i + 1
+        while j < len(lines):
+            bl = lines[j].strip()
+            # Stop at next ticker (but not at "Buy"/"Sell")
+            if re.match(r'^[A-Z]{1,5}$', bl) and bl not in ("Buy", "Sell", "USD", "CAD", "ETF"):
+                # Check if it looks like a company name follows
+                if j + 1 < len(lines) and not re.match(r'^[A-Z]{1,5}$', lines[j + 1].strip()):
+                    break
+            block_lines.append(bl)
+            j += 1
+
+        # Parse block: first $XXX is total value, first "N shares" is quantity
+        total_value = None
+        shares = None
+        currency = "USD"
+
+        for bl in block_lines:
+            # Value: "$134.47 USD" or "$2,323.80 CAD"
+            val_match = re.match(r'^\$([0-9,]+\.?\d*)\s*(USD|CAD)', bl)
+            if val_match and total_value is None:
+                total_value = float(val_match.group(1).replace(",", ""))
+                currency = val_match.group(2)
+
+            # Shares: "0.8811 shares"
+            shares_match = re.match(r'^([0-9.]+)\s*shares', bl)
+            if shares_match and shares is None:
+                shares = float(shares_match.group(1))
+
+            # Ounces (gold): "0.3508951974 ounces"
+            oz_match = re.match(r'^([0-9.]+)\s*ounces', bl)
+            if oz_match and shares is None and ticker == "GLD":
+                oz = float(oz_match.group(1))
+                shares = round(oz * 10, 4)
+
+        if shares and shares > 0 and total_value and total_value > 0:
+            if currency == "CAD":
+                total_value *= 0.72
+            entry_price = round(total_value / shares, 2)
+            positions.append({
+                "ticker": ticker,
+                "shares": round(shares, 6),
+                "entry_price": entry_price,
+            })
+
+        i = j if j > i + 1 else i + 1
+
+    return positions
+
+
+@app.post("/api/portfolio/import")
+def import_portfolio(data: dict):
+    """Parse Wealthsimple portfolio text and replace all positions."""
+    import yaml
+    import uuid
+    from datetime import datetime
+
+    text = data.get("text", "")
+    if not text.strip():
+        raise HTTPException(400, "text required")
+
+    parsed = _parse_wealthsimple_text(text)
+    if not parsed:
+        raise HTTPException(400, "Could not parse any positions from text")
+
+    # Build new portfolio
+    today = datetime.now().strftime("%Y-%m-%d")
+    from stockpulse.config.settings import load_portfolio
+    port = load_portfolio()
+
+    positions = []
+    for p in parsed:
+        positions.append({
+            "ticker": p["ticker"],
+            "shares": p["shares"],
+            "entry_price": p["entry_price"],
+            "entry_date": today,
+            "lots": [{
+                "lot_id": str(uuid.uuid4())[:8],
+                "shares": p["shares"],
+                "cost_basis": p["entry_price"],
+                "acquired_at": today,
+                "source": "import",
+            }],
+        })
+
+    port["positions"] = positions
+    port["cash"] = data.get("cash", 0)
+
+    port_path = PROJECT_ROOT / "stockpulse" / "config" / "portfolio.yaml"
+    with open(port_path, "w") as f:
+        yaml.dump(port, f, default_flow_style=False, sort_keys=False)
+
+    return {
+        "status": "imported",
+        "positions": len(positions),
+        "tickers": [p["ticker"] for p in positions],
+    }
+
+
+@app.post("/api/portfolio/position")
+def upsert_position(data: dict):
+    """Add or update a single position."""
+    import yaml
+    import uuid
+    from datetime import datetime
+
+    ticker = data.get("ticker", "").upper()
+    shares = data.get("shares")
+    entry_price = data.get("entry_price")
+    if not ticker or shares is None or entry_price is None:
+        raise HTTPException(400, "ticker, shares, entry_price required")
+
+    from stockpulse.config.settings import load_portfolio
+    port = load_portfolio()
+    positions = port.get("positions", [])
+    today = data.get("entry_date", datetime.now().strftime("%Y-%m-%d"))
+
+    # Find existing position
+    existing = next((p for p in positions if p["ticker"] == ticker), None)
+    if existing:
+        existing["shares"] = float(shares)
+        existing["entry_price"] = float(entry_price)
+        existing["entry_date"] = today
+        existing["lots"] = [{
+            "lot_id": str(uuid.uuid4())[:8],
+            "shares": float(shares),
+            "cost_basis": float(entry_price),
+            "acquired_at": today,
+            "source": "manual",
+        }]
+    else:
+        positions.append({
+            "ticker": ticker,
+            "shares": float(shares),
+            "entry_price": float(entry_price),
+            "entry_date": today,
+            "lots": [{
+                "lot_id": str(uuid.uuid4())[:8],
+                "shares": float(shares),
+                "cost_basis": float(entry_price),
+                "acquired_at": today,
+                "source": "manual",
+            }],
+        })
+
+    port["positions"] = positions
+    port_path = PROJECT_ROOT / "stockpulse" / "config" / "portfolio.yaml"
+    with open(port_path, "w") as f:
+        yaml.dump(port, f, default_flow_style=False, sort_keys=False)
+
+    return {"status": "updated", "ticker": ticker}
+
+
+@app.delete("/api/portfolio/position/{ticker}")
+def delete_position(ticker: str):
+    """Remove a position."""
+    import yaml
+    from stockpulse.config.settings import load_portfolio
+
+    port = load_portfolio()
+    positions = port.get("positions", [])
+    t = ticker.upper()
+    before = len(positions)
+    port["positions"] = [p for p in positions if p["ticker"] != t]
+
+    if len(port["positions"]) == before:
+        raise HTTPException(404, f"Position {t} not found")
+
+    port_path = PROJECT_ROOT / "stockpulse" / "config" / "portfolio.yaml"
+    with open(port_path, "w") as f:
+        yaml.dump(port, f, default_flow_style=False, sort_keys=False)
+
+    return {"status": "deleted", "ticker": t}
+
+
+# ═══════════════════════════════════════════════════
 # Signals (on-demand analysis)
 # ═══════════════════════════════════════════════════
 

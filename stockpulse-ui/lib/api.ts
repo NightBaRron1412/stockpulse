@@ -43,6 +43,15 @@ export const api = {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount, ...(tickers?.length ? { tickers } : {}) }),
     }),
+  importPortfolio: (text: string, cash?: number) => fetcher<any>("/api/portfolio/import", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, cash: cash ?? 0 }),
+  }),
+  upsertPosition: (ticker: string, shares: number, entry_price: number) => fetcher<any>("/api/portfolio/position", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticker, shares, entry_price }),
+  }),
+  deletePosition: (ticker: string) => fetcher<any>(`/api/portfolio/position/${ticker}`, { method: "DELETE" }),
   advisorSuggestions: () => fetcher<any>("/api/advisor/suggestions"),
   advisorAcknowledge: (hash: string) => fetcher<any>("/api/advisor/acknowledge", {
     method: "POST", headers: { "Content-Type": "application/json" },
