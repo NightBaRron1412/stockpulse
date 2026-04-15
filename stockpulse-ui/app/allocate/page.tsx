@@ -27,6 +27,16 @@ export default function AllocatePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tickerInput, setTickerInput] = useState("");
+  const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
+
+  function addTicker() {
+    const t = tickerInput.trim().toUpperCase();
+    if (t && !selectedTickers.includes(t)) {
+      setSelectedTickers([...selectedTickers, t]);
+    }
+    setTickerInput("");
+  }
 
   async function handleGenerate() {
     const amount = parseFloat(amountInput.replace(/,/g, ""));
@@ -38,7 +48,7 @@ export default function AllocatePage() {
     setError(null);
     setResult(null);
     try {
-      const data = await api.allocate(amount);
+      const data = await api.allocate(amount, selectedTickers.length > 0 ? selectedTickers : undefined);
       setResult(data);
     } catch (e: any) {
       setError(e?.message || "Failed to generate allocation plan.");
@@ -56,7 +66,7 @@ export default function AllocatePage() {
       {/* Input card */}
       <div className="glass-card p-6 space-y-4">
         <p className="text-sm text-slate-400">
-          Enter an investment amount to receive a signal-based allocation plan across your watchlist.
+          Enter an investment amount and optionally select specific tickers. Leave tickers empty to auto-select from top signals.
         </p>
         <div className="flex items-center gap-3 max-w-sm">
           <div className="relative flex-1">
@@ -84,6 +94,38 @@ export default function AllocatePage() {
               "Generate Plan"
             )}
           </Button>
+        </div>
+
+        {/* Optional: select specific tickers */}
+        <div>
+          <p className="text-xs text-slate-500 mb-2">Specific tickers (optional — leave empty for auto-selection)</p>
+          <div className="flex items-center gap-2">
+            <Input
+              className="w-28 bg-slate-800/60 border-slate-700/50 text-sm"
+              placeholder="AAPL"
+              value={tickerInput}
+              onChange={(e) => setTickerInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTicker(); } }}
+            />
+            <Button variant="outline" size="sm" onClick={addTicker} className="border-slate-700 text-xs">Add</Button>
+            {selectedTickers.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setSelectedTickers([])} className="border-slate-700 text-xs text-slate-500">Clear all</Button>
+            )}
+          </div>
+          {selectedTickers.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {selectedTickers.map((t) => (
+                <span key={t} className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/10 text-blue-400 text-xs border border-blue-500/20">
+                  {t}
+                  <button onClick={() => setSelectedTickers(selectedTickers.filter(x => x !== t))} className="hover:text-red-400 ml-0.5">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
       </div>

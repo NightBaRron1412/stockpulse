@@ -496,6 +496,8 @@ def suggest_allocation(data: dict):
     if amount <= 0:
         raise HTTPException(400, "Amount must be positive")
 
+    selected_tickers = data.get("tickers", [])  # optional: user-selected tickers
+
     all_recs = _get_latest_scan()
 
     from stockpulse.portfolio.tracker import get_portfolio_status
@@ -509,7 +511,26 @@ def suggest_allocation(data: dict):
 
     total_portfolio = portfolio["total_current"] + amount
 
-    candidates = [r for r in all_recs if r.get("action") in ("BUY", "WATCHLIST")]
+    if selected_tickers:
+        # User picked specific tickers — analyze them on demand
+        from stockpulse.data.provider import get_price_history
+        from stockpulse.research.recommendation import generate_recommendation
+        candidates = []
+        recs_map = {r["ticker"]: r for r in all_recs}
+        for t in selected_tickers:
+            t = t.upper()
+            if t in recs_map:
+                candidates.append(recs_map[t])
+            else:
+                try:
+                    df = get_price_history(t, period="1y")
+                    if not df.empty and len(df) >= 50:
+                        candidates.append(generate_recommendation(t, df))
+                except Exception:
+                    pass
+    else:
+        # Auto-select from latest scan
+        candidates = [r for r in all_recs if r.get("action") in ("BUY", "WATCHLIST")]
     candidates.sort(key=lambda r: r.get("composite_score", 0), reverse=True)
 
     allocations = []
