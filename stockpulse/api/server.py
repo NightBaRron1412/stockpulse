@@ -125,6 +125,15 @@ def _parse_activity_log() -> list[dict]:
     return list(reversed(events[-30:]))
 
 
+def _get_next_scheduled() -> str:
+    try:
+        from stockpulse.config.settings import load_strategies as _ls
+        sched = _ls().get("scheduling", {})
+        return f"{sched.get('morning_scan', '09:35')} {sched.get('timezone', 'ET')}"
+    except Exception:
+        return "09:35 ET"
+
+
 def _get_scan_status() -> dict:
     """Check if a scan or job is currently running."""
     log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
@@ -195,7 +204,7 @@ def _get_scan_status() -> dict:
         "running": running,
         "progress": progress if running else current_job,
         "last_completed": last_completed,
-        "next_scheduled": f"{load_strategies().get('scheduling', {}).get('morning_scan', '09:35')} {load_strategies().get('scheduling', {}).get('timezone', 'ET')}",
+        "next_scheduled": _get_next_scheduled(),
     }
 
 
