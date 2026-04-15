@@ -43,11 +43,12 @@ def _get_latest_scan() -> list[dict]:
         except Exception:
             continue
 
-    # Apply Shariah filter if enabled (fast — hardcoded lists + cache only)
-    from stockpulse.config.settings import load_strategies
+    # Apply Shariah filter if enabled, but always keep user watchlist tickers
+    from stockpulse.config.settings import load_strategies, load_watchlists
     if load_strategies().get("filters", {}).get("shariah_only", False):
         from stockpulse.filters.shariah import is_compliant_fast
-        recs = [r for r in recs if is_compliant_fast(r.get("ticker", ""))]
+        user_tickers = set(load_watchlists().get("user", []))
+        recs = [r for r in recs if r.get("ticker", "") in user_tickers or is_compliant_fast(r.get("ticker", ""))]
 
     return recs
 
