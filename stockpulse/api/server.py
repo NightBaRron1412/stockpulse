@@ -259,12 +259,19 @@ def get_watchlist_ticker(ticker: str):
     if df.empty:
         raise HTTPException(404, f"No data for {ticker}")
     result = generate_recommendation(t, df)
-    # Add current price
+    # Add current price + entry timing
     try:
         quote = get_current_quote(t)
         result["current_price"] = quote.get("price", 0)
     except Exception:
         pass
+    try:
+        from stockpulse.portfolio.entry_timing import assess_entry_timing
+        timing = assess_entry_timing(t, df, result.get("action", "HOLD"))
+        result["entry_timing"] = timing
+        result["entry_price"] = timing.get("target_price") or result.get("current_price")
+    except Exception:
+        result["entry_price"] = result.get("current_price")
     return result
 
 
@@ -572,13 +579,20 @@ def analyze_ticker(ticker: str):
         raise HTTPException(404, f"No data for {ticker}")
     result = generate_recommendation(t, df)
 
-    # Add current price
+    # Add current price + entry timing
     try:
         from stockpulse.data.provider import get_current_quote
         quote = get_current_quote(t)
         result["current_price"] = quote.get("price", 0)
     except Exception:
         pass
+    try:
+        from stockpulse.portfolio.entry_timing import assess_entry_timing
+        timing = assess_entry_timing(t, df, result.get("action", "HOLD"))
+        result["entry_timing"] = timing
+        result["entry_price"] = timing.get("target_price") or result.get("current_price")
+    except Exception:
+        result["entry_price"] = result.get("current_price")
 
     # Save result into latest scan JSON so watchlist shows it
     try:

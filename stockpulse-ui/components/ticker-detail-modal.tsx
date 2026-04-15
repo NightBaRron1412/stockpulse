@@ -119,7 +119,12 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
                       <div className="flex flex-wrap gap-4 text-xs py-2 px-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
                         {current != null && current > 0 && (
                           <span className="font-mono-data">
-                            Price: <span className="text-slate-200 font-medium">${current.toFixed(2)}</span>
+                            Current: <span className="text-slate-200 font-medium">${current.toFixed(2)}</span>
+                          </span>
+                        )}
+                        {(data as any).entry_price != null && (data as any).entry_price > 0 && (
+                          <span className="font-mono-data">
+                            Entry: <span className="text-green-400 font-medium">${(data as any).entry_price.toFixed(2)}</span>
                           </span>
                         )}
                         {ema20 != null && (
@@ -150,6 +155,17 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
                       </div>
                     );
                   })()}
+                  {(data as any).entry_timing && (
+                    <p className={cn("text-[11px] mt-1.5 font-medium",
+                      (data as any).entry_timing.timing === "now" ? "text-green-400/80" :
+                      (data as any).entry_timing.timing === "wait" ? "text-amber-400/80" :
+                      "text-blue-400/80"
+                    )}>
+                      {(data as any).entry_timing.timing === "now" ? "Good entry zone" :
+                       (data as any).entry_timing.timing === "wait" ? "Wait for better entry" :
+                       "Consider limit order"}: {(data as any).entry_timing.reason}
+                    </p>
+                  )}
                 </div>
 
                 {/* Invalidation */}
