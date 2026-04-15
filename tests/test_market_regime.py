@@ -68,7 +68,8 @@ def test_detect_regime_trending(mock_strats, mock_hist, mock_vix):
     mock_strats.return_value = {"market_regime": _cfg()}
     mock_hist.return_value = df
 
-    result = detect_regime()
+    with patch("stockpulse.signals.market_regime._compute_breadth", return_value=70.0):
+        result = detect_regime()
     assert result["regime"] == "trending"
     assert result["confidence"] > 50
 

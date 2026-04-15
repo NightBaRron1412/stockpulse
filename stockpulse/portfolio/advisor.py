@@ -50,6 +50,7 @@ class SuggestionType(str, Enum):
     BUY_FROM_CASH = "buy_from_cash"
     SWAP = "swap"
     WATCHLIST_STARTER = "watchlist_starter"
+    ADD_TO_POSITION = "add_to_position"
     RISK_ALERT = "risk_alert"
     NEAR_MISS = "near_miss"
 
@@ -58,8 +59,8 @@ _SEVERITY_ORDER = {Severity.URGENT: 0, Severity.ACTIONABLE: 1, Severity.INFORMAT
 _TYPE_ORDER = {
     SuggestionType.EXIT: 0, SuggestionType.TRIM_CAUTION: 1,
     SuggestionType.TRIM_CONCENTRATION: 2, SuggestionType.RISK_ALERT: 3,
-    SuggestionType.BUY_FROM_CASH: 4, SuggestionType.SWAP: 5,
-    SuggestionType.WATCHLIST_STARTER: 6, SuggestionType.NEAR_MISS: 7,
+    SuggestionType.BUY_FROM_CASH: 4, SuggestionType.ADD_TO_POSITION: 5,
+    SuggestionType.SWAP: 6, SuggestionType.WATCHLIST_STARTER: 7, SuggestionType.NEAR_MISS: 8,
 }
 
 
@@ -207,7 +208,7 @@ def _update_persistence(state: dict, rec_map: dict, held_tickers: set, scan_trig
             ta[ticker] = {
                 "action": action, "first_seen": now,
                 "scan_count": 1, "eod_count": 1 if scan_trigger == "eod" else 0,
-                "last_score": score,
+                "last_score": score, "first_score": score,
             }
 
     # Clean up tickers no longer relevant
@@ -463,6 +464,152 @@ def _evaluate_deployment(ctx: dict, rec_map: dict, state: dict, config: dict,
             if swap:
                 suggestions.append(swap)
             break
+
+    return suggestions
+
+
+def _evaluate_progressive_adds(ctx: dict, rec_map: dict, state: dict, config: dict,
+                               deployable: float) -> list[AdvisorSuggestion]:
+    """Evaluate adding to existing WATCHLIST positions (progressive scale-in).
+
+    Ladder: starter 3% → add1 5% → add2 7% → full 12% on BUY only.
+    """
+    from stockpulse.config.settings import load_strategies
+
+    strat = load_strategies()
+    add_cfg = strat.get("allocation", {}).get("progressive_adds", {})
+    if not add_cfg.get("enabled", False):
+        return []
+
+    suggestions = []
+    sizing = add_cfg.get("sizing", {})
+    limits = add_cfg.get("portfolio_limits", {})
+    max_wl_exposure = limits.get("max_watchlist_exposure", 0.30)
+    max_adds_per_cycle = limits.get("max_watchlist_adds_per_cycle", 2)
+
+    min_hold = add_cfg.get("min_hold_days", 5)
+    min_between = add_cfg.get("min_days_between_adds", 3)
+    min_improvement = add_cfg.get("require_score_improvement", 4)
+
+    add1_target = sizing.get("add1_target", 0.05)
+    add2_target = sizing.get("add2_target", 0.067)
+    max_wl_pos = sizing.get("max_watchlist_position", 0.07)
+
+    # Current total watchlist exposure
+    wl_exposure = 0
+    for pos in ctx["positions"]:
+        rec = rec_map.get(pos["ticker"], {})
+        if rec.get("action") in ("WATCHLIST", "BUY"):
+            wl_exposure += pos.get("current_value", 0)
+    wl_pct = wl_exposure / ctx["total"] if ctx["total"] > 0 else 0
+
+    if wl_pct >= max_wl_exposure:
+        return []
+
+    # Evaluate each held position
+    adds_this_cycle = 0
+    candidates = []
+
+    for pos in ctx["positions"]:
+        ticker = pos["ticker"]
+        rec = rec_map.get(ticker, {})
+        action = rec.get("action", "UNKNOWN")
+        score = rec.get("composite_score", 0)
+
+        if action not in ("WATCHLIST",):
+            continue
+        if action in ("CAUTION", "SELL"):
+            continue
+
+        current_weight = pos.get("current_value", 0) / ctx["total"] if ctx["total"] > 0 else 0
+        current_price = pos.get("current_price", 0)
+        entry_price = pos.get("entry_price", 0)
+
+        # Check: price above average entry (never average down)
+        if add_cfg.get("require_price_gte_avg_entry", True) and current_price < entry_price:
+            continue
+
+        # Check: held long enough
+        ta = state.get("ticker_actions", {}).get(ticker, {})
+        scan_count = ta.get("scan_count", 0)
+        if scan_count < min_hold:
+            continue
+
+        # Check: score improvement from first seen
+        first_score = ta.get("first_score", score)
+        if score - first_score < min_improvement:
+            continue
+
+        # Check: trend confirms
+        if add_cfg.get("require_trend_confirm", True):
+            confirmation = rec.get("confirmation", {})
+            if not confirmation.get("buckets", {}).get("trend", {}).get("confirms", False):
+                continue
+
+        # Check: RS >= 60
+        rs_score = rec.get("signals", {}).get("relative_strength", {}).get("score", 0)
+        if rs_score < add_cfg.get("require_rs_gte", 60):
+            continue
+
+        # Check: price above 20 EMA
+        if add_cfg.get("require_price_above_20ema", True):
+            ma_signals = rec.get("signals", {}).get("moving_averages", {})
+            above_ema = ma_signals.get("price_above_20ema", None)
+            if above_ema is False:
+                continue
+
+        # Check: no earnings blackout
+        if add_cfg.get("block_on_earnings_blackout", True):
+            earnings_score = rec.get("signals", {}).get("earnings", {}).get("score", 0)
+            if earnings_score <= -30:
+                continue
+
+        # Determine target weight based on ladder
+        if current_weight < add1_target:
+            target_weight = add1_target
+            add_label = "Add #1"
+        elif current_weight < add2_target:
+            target_weight = add2_target
+            add_label = "Add #2"
+        else:
+            continue  # Already at max WATCHLIST size
+
+        target_weight = min(target_weight, max_wl_pos)
+        add_dollars = (target_weight - current_weight) * ctx["total"]
+
+        if add_dollars < 30 or add_dollars > deployable:
+            continue
+
+        candidates.append((score, ticker, pos, add_dollars, target_weight, add_label))
+
+    # Sort by score descending, take top N
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    for score, ticker, pos, add_dollars, target_weight, add_label in candidates[:max_adds_per_cycle]:
+        if deployable < 30:
+            break
+
+        suggestions.append(AdvisorSuggestion(
+            severity=Severity.ACTIONABLE,
+            suggestion_type=SuggestionType.ADD_TO_POSITION,
+            ticker=ticker,
+            action="ADD",
+            score=score,
+            confidence=rec_map.get(ticker, {}).get("confidence", 0),
+            summary=(
+                f"{add_label} {ticker}: Size up to {target_weight:.0%} "
+                f"(+${add_dollars:,.0f}). Score {score:+.1f}, improving."
+            ),
+            details=(
+                f"Current weight: {pos.get('current_value', 0) / ctx['total'] * 100:.1f}% "
+                f"(${pos.get('current_value', 0):,.0f}). "
+                f"Target: {target_weight:.0%} (${target_weight * ctx['total']:,.0f}). "
+                f"Held {state.get('ticker_actions', {}).get(ticker, {}).get('scan_count', 0)} scans, "
+                f"score improved +{score - state.get('ticker_actions', {}).get(ticker, {}).get('first_score', score):.1f} pts."
+            ),
+            suggested_amount=round(add_dollars, 2),
+        ))
+        deployable -= add_dollars
+        adds_this_cycle += 1
 
     return suggestions
 
@@ -829,21 +976,26 @@ def evaluate(recommendations: list[dict], scan_trigger: str = "manual") -> list[
         if s.suggestion_type in (SuggestionType.TRIM_CAUTION, SuggestionType.TRIM_CONCENTRATION)
     )
 
-    # 2. Deployment (uses cash_available + freed_cash)
+    # 2. Deployment: new BUYs (uses cash_available + freed_cash)
     deploy_suggestions = _evaluate_deployment(ctx, rec_map, state, config, freed_cash)
 
-    # 3. Watchlist — chain cash: subtract what deployment already consumed
+    # 3. Scale up existing WATCHLIST positions (progressive adds)
     deployed_cash = sum(s.suggested_amount or 0 for s in deploy_suggestions)
+    remaining_cash = max(0, ctx["cash_available"] + freed_cash - deployed_cash)
+    add_suggestions = _evaluate_progressive_adds(ctx, rec_map, state, config, remaining_cash)
+
+    # 4. New WATCHLIST starters — chain cash after BUYs and adds
+    added_cash = sum(s.suggested_amount or 0 for s in add_suggestions)
     ctx_for_wl = dict(ctx)
-    ctx_for_wl["cash_available"] = max(0, ctx["cash_available"] + freed_cash - deployed_cash)
+    ctx_for_wl["cash_available"] = max(0, remaining_cash - added_cash)
     watchlist_suggestions = _evaluate_watchlist(ctx_for_wl, rec_map, state, config)
 
-    # 4. Near-misses (informational only, no dollar amounts)
-    already_suggested = {s.ticker for s in risk_suggestions + deploy_suggestions + watchlist_suggestions}
+    # 5. Near-misses (informational only, no dollar amounts)
+    already_suggested = {s.ticker for s in risk_suggestions + deploy_suggestions + add_suggestions + watchlist_suggestions}
     near_miss_suggestions = _evaluate_near_misses(ctx, rec_map, state, config, already_suggested)
 
     # Combine, sort by severity then type
-    all_suggestions = risk_suggestions + deploy_suggestions + watchlist_suggestions + near_miss_suggestions
+    all_suggestions = risk_suggestions + deploy_suggestions + add_suggestions + watchlist_suggestions + near_miss_suggestions
     all_suggestions.sort(key=lambda s: (_SEVERITY_ORDER.get(s.severity, 9), _TYPE_ORDER.get(s.suggestion_type, 9)))
 
     # Add pricing, entry timing, and pattern matching to all suggestions
