@@ -1,3 +1,5 @@
+filters:
+  shariah_only: true
 signals:
   rsi:
     period: 14
@@ -134,3 +136,32 @@ allocation:
   never_average_down_watchlist: true
   watchlist_exit_score: 20
   watchlist_timeout_days: 5
+portfolio_advisor:
+  evaluate_after_every_scan: true
+  push_only_on_state_change: true
+  manual_execution: true
+  cash_reserve_min: 0
+  allow_watchlist_starters: true
+  watchlist_starter_cash_only: true
+  watchlist_starter_max_size_of_buy: 0.33
+  suggest_trim_on_caution:
+    enabled: true
+    require_persistence_scans: 2
+    trim_fraction: 0.25
+  suggest_exit_on_sell: true
+  suggest_swap_to_fund_buy:
+    enabled: true
+    incoming_min_score: 60
+    incoming_tier: BUY
+    outgoing_max_tier: HOLD
+    min_score_gap: 20
+    require_different_cluster: true
+    require_persistence_scans: 2
+    max_swaps_per_day: 1
+  turnover:
+    max_trims_per_week_per_position: 2
+    min_hold_trading_days: 3
+  never_swap_into_watchlist: true
+  never_override_risk_caps: true
+  taxable_account_show_tax_impact: true
+  show_wash_sale_warning: true

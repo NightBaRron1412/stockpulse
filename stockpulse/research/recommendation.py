@@ -84,8 +84,8 @@ def _build_thesis(action: str, signals: dict, composite: float) -> str:
 
     return ". ".join(parts)
 
-def generate_recommendation(ticker: str, df: pd.DataFrame) -> dict:
-    signals = compute_all_signals(ticker, df)
+def generate_recommendation(ticker: str, df: pd.DataFrame, use_llm: bool = True) -> dict:
+    signals = compute_all_signals(ticker, df, use_llm=use_llm)
     composite = compute_composite_score(signals)
     action = classify_action(composite)
     confidence = compute_confidence(composite)

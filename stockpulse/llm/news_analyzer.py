@@ -19,6 +19,9 @@ from stockpulse.data.provider import get_news
 
 logger = logging.getLogger(__name__)
 
+# In-memory cache: {ticker: (headlines_hash, result)}
+_NEWS_CACHE: dict[str, tuple[str, dict]] = {}
+
 
 def _get_llm_client():
     """Get Anthropic client (reuses summarizer's client setup)."""
@@ -50,16 +53,27 @@ def analyze_news_sentiment(ticker: str) -> dict:
     if not headlines:
         return {"score": 0.0, "event_count": 0, "events": [], "summary": "No headlines", "source": "none"}
 
+    # Cache by headlines content — only re-analyze if news actually changed
+    h_hash = hash(tuple(sorted(headlines)))
+    if ticker in _NEWS_CACHE:
+        cached_hash, cached_result = _NEWS_CACHE[ticker]
+        if cached_hash == h_hash:
+            return cached_result
+
     # Try LLM analysis
     client = _get_llm_client()
     if client is not None:
         try:
-            return _llm_analyze(client, ticker, headlines)
+            result = _llm_analyze(client, ticker, headlines)
+            _NEWS_CACHE[ticker] = (h_hash, result)
+            return result
         except Exception as e:
             logger.warning("LLM news analysis failed for %s: %s — using keyword fallback", ticker, str(e)[:80])
 
     # Fallback: simple keyword counting (weight stays low)
-    return _fallback_analyze(ticker, headlines)
+    result = _fallback_analyze(ticker, headlines)
+    _NEWS_CACHE[ticker] = (h_hash, result)
+    return result
 
 
 def _llm_analyze(client, ticker: str, headlines: list[str]) -> dict:
@@ -80,17 +94,29 @@ Respond with ONLY valid JSON (no markdown, no explanation):
 
     response = client.messages.create(
         model=cfg["llm_model"],
-        max_tokens=500,
+        max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
     text = response.content[0].text.strip()
 
-    # Parse JSON response
     # Handle potential markdown wrapping
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
-    result = json.loads(text)
+    # Try to repair truncated JSON
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError:
+        # Attempt to fix common truncation: find last complete object
+        # Try closing any open strings/arrays/objects
+        for suffix in ['"}]}', '"}],"summary":"N/A"}', '"],"summary":"N/A"}', '}']:
+            try:
+                result = json.loads(text + suffix)
+                break
+            except json.JSONDecodeError:
+                continue
+        else:
+            raise
 
     score = float(result.get("overall_score", 0))
     score = max(-100.0, min(100.0, score))

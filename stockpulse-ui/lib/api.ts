@@ -43,4 +43,11 @@ export const api = {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount, ...(tickers?.length ? { tickers } : {}) }),
     }),
+  advisorSuggestions: () => fetcher<any>("/api/advisor/suggestions"),
+  advisorAcknowledge: (hash: string) => fetcher<any>("/api/advisor/acknowledge", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hash }),
+  }),
+  advisorEvaluate: () => fetcher<any>("/api/advisor/evaluate", { method: "POST" }),
+  advisorConfig: () => fetcher<any>("/api/advisor/config"),
 };

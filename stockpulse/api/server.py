@@ -28,19 +28,28 @@ def _read_json(path: Path) -> dict | list:
 
 
 def _get_latest_scan() -> list[dict]:
-    """Get recommendations from the most recent scan JSON file."""
+    """Get recommendations from the most recent scan JSON file, filtered by active filters."""
     json_dir = PROJECT_ROOT / "outputs" / "json"
     if not json_dir.exists():
         return []
     files = sorted(json_dir.glob("*.json"), reverse=True)
+    recs = []
     for f in files:
         try:
             data = _read_json(f)
             if isinstance(data, dict) and "recommendations" in data:
-                return data.get("recommendations", [])
+                recs = data.get("recommendations", [])
+                break
         except Exception:
             continue
-    return []
+
+    # Apply Shariah filter if enabled (fast — hardcoded lists + cache only)
+    from stockpulse.config.settings import load_strategies
+    if load_strategies().get("filters", {}).get("shariah_only", False):
+        from stockpulse.filters.shariah import is_compliant_fast
+        recs = [r for r in recs if is_compliant_fast(r.get("ticker", ""))]
+
+    return recs
 
 
 def _parse_activity_log() -> list[dict]:
@@ -121,42 +130,57 @@ def _get_scan_status() -> dict:
     current_job = ""
     if log_path.exists():
         try:
-            lines = log_path.read_text().strip().split("\n")
+            # Read only last 100 lines for performance
+            with open(log_path) as f:
+                lines = f.readlines()[-100:]
+
+            # Walk backwards: find the latest completion and latest start
+            latest_complete_ts = ""
+            latest_start_ts = ""
+            latest_progress = ""
+
             for line in reversed(lines):
-                if "Scan complete" in line and last_completed == "Never":
-                    last_completed = line[:19]
-                if "MORNING SCAN START" in line and last_completed == "Never":
-                    running = True
+                ts = line[:19] if len(line) >= 19 else ""
+
+                if ("Scan complete" in line or "Morning scan complete" in line) and not latest_complete_ts:
+                    latest_complete_ts = ts
+                    last_completed = ts
+
+                if ("MORNING SCAN START" in line or "Starting full scan" in line) and not latest_start_ts:
+                    latest_start_ts = ts
                     current_job = "Morning Scan"
-                if "Scanned " in line and "/" in line and running:
+
+                if "Scanned " in line and "/" in line and not latest_progress:
                     try:
-                        progress = line.split("Scanned ")[1].split(" ")[0]
+                        latest_progress = line.split("Scanned ")[1].split(" ")[0]
                     except Exception:
                         pass
-                    break
-            # Check if an intraday/portfolio/SEC job is actively running (started but not completed in last few lines)
-            if not running:
+
+            # Running = started after last completed
+            if latest_start_ts and (not latest_complete_ts or latest_start_ts > latest_complete_ts):
+                running = True
+                progress = latest_progress
+            else:
+                # Check recent lines for short jobs (intraday, portfolio, SEC)
                 recent = lines[-5:] if len(lines) >= 5 else lines
-                for line in reversed(recent):
+                started_job = None
+                for line in recent:
                     if "--- Intraday check ---" in line:
-                        current_job = "Intraday Check"
-                        running = True
-                        break
+                        started_job = "Intraday Check"
                     elif "--- Portfolio check ---" in line:
-                        current_job = "Portfolio Check"
-                        running = True
-                        break
+                        started_job = "Portfolio Check"
                     elif "--- SEC filing scan ---" in line:
-                        current_job = "SEC Scan"
-                        running = True
-                        break
+                        started_job = "SEC Scan"
                     elif "executed successfully" in line or "no changes" in line or "complete" in line:
-                        break  # last job finished, idle
+                        started_job = None
+                if started_job:
+                    running = True
+                    current_job = started_job
         except Exception:
             pass
     return {
         "running": running,
-        "progress": progress or current_job,
+        "progress": progress if running else current_job,
         "last_completed": last_completed,
         "next_scheduled": "09:35 ET",
     }
@@ -231,10 +255,45 @@ def get_watchlist_ticker(ticker: str):
 def get_portfolio():
     from stockpulse.portfolio.tracker import get_portfolio_status
     from stockpulse.portfolio.risk import check_drawdown_status
+    from stockpulse.config.settings import load_portfolio
     status = get_portfolio_status()
     peak = max(status["total_current"], status["total_invested"]) if status["total_invested"] > 0 else 1
     dd = check_drawdown_status(status["total_current"], peak)
-    return {**status, "drawdown": dd}
+    port = load_portfolio()
+    cash = port.get("cash", 0)
+    return {**status, "drawdown": dd, "cash": cash}
+
+@app.get("/api/portfolio/lots/{ticker}")
+def get_portfolio_lots(ticker: str):
+    from stockpulse.portfolio.lots import get_lots, compute_lot_tax_info
+    from stockpulse.data.provider import get_latest_price
+    lots = get_lots(ticker.upper())
+    if not lots:
+        raise HTTPException(404, f"No lots for {ticker}")
+    try:
+        price = get_latest_price(ticker.upper())
+    except Exception:
+        price = 0
+    return {
+        "ticker": ticker.upper(),
+        "current_price": price,
+        "lots": [compute_lot_tax_info(lot, price) for lot in lots],
+    }
+
+@app.post("/api/portfolio/cash")
+def update_cash(data: dict):
+    """Update cash balance in portfolio."""
+    from stockpulse.config.settings import load_portfolio
+    import yaml
+    cash = data.get("cash", 0)
+    if not isinstance(cash, (int, float)) or cash < 0:
+        raise HTTPException(400, "cash must be a non-negative number")
+    port_path = PROJECT_ROOT / "stockpulse" / "config" / "portfolio.yaml"
+    port = load_portfolio()
+    port["cash"] = round(float(cash), 2)
+    with open(port_path, "w") as f:
+        yaml.dump(port, f, default_flow_style=False, sort_keys=False)
+    return {"status": "updated", "cash": port["cash"]}
 
 
 # ═══════════════════════════════════════════════════
@@ -364,8 +423,22 @@ def get_scan_status():
 @app.post("/api/scan")
 def trigger_scan():
     def _run():
-        from stockpulse.scheduler.jobs import morning_scan_job
-        morning_scan_job()
+        import logging
+        # Ensure scan logs go to the log file so status tracking works
+        log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        root = logging.getLogger()
+        fh = logging.FileHandler(log_path)
+        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                                           datefmt="%Y-%m-%d %H:%M:%S"))
+        root.addHandler(fh)
+        root.setLevel(logging.INFO)
+        try:
+            from stockpulse.scheduler.jobs import morning_scan_job
+            morning_scan_job()
+        finally:
+            root.removeHandler(fh)
+            fh.close()
     threading.Thread(target=_run, daemon=True).start()
     return {"status": "started"}
 
@@ -483,6 +556,8 @@ def get_config_endpoint():
         "risk": strat.get("risk", {}),
         "scheduling": strat.get("scheduling", {}),
         "allocation": strat.get("allocation", {}),
+        "filters": strat.get("filters", {}),
+        "portfolio_advisor": strat.get("portfolio_advisor", {}),
     }
 
 
@@ -754,6 +829,12 @@ def update_config(data: dict):
         for key, val in data["scheduling"].items():
             if key in strat.get("scheduling", {}):
                 strat["scheduling"][key] = val
+    if "filters" in data:
+        if "filters" not in strat:
+            strat["filters"] = {}
+        for key, val in data["filters"].items():
+            if key in ("shariah_only",):
+                strat["filters"][key] = val
     if "allocation" in data:
         # Only allow editing sizing/limits, not the requirement rules
         editable_alloc_keys = {
@@ -766,11 +847,62 @@ def update_config(data: dict):
         for key, val in data["allocation"].items():
             if key in editable_alloc_keys and key in strat.get("allocation", {}):
                 strat["allocation"][key] = val
+    if "portfolio_advisor" in data:
+        if "portfolio_advisor" not in strat:
+            strat["portfolio_advisor"] = {}
+        pa = strat["portfolio_advisor"]
+        for key, val in data["portfolio_advisor"].items():
+            # Handle nested dicts (suggest_trim_on_caution, suggest_swap_to_fund_buy, turnover)
+            if isinstance(val, dict) and isinstance(pa.get(key), dict):
+                for subkey, subval in val.items():
+                    pa[key][subkey] = subval
+            else:
+                pa[key] = val
     # Write back
     strat_path = PROJECT_ROOT / "stockpulse" / "config" / "strategies.yaml"
     with open(strat_path, "w") as f:
         yaml.dump(strat, f, default_flow_style=False, sort_keys=False)
     return {"status": "updated"}
+
+
+# ═══════════════════════════════════════════════════
+# Portfolio Advisor
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/advisor/suggestions")
+def get_advisor_suggestions():
+    from stockpulse.portfolio.advisor import get_latest_suggestions
+    return get_latest_suggestions()
+
+@app.post("/api/advisor/acknowledge")
+def acknowledge_advisor(data: dict):
+    suggestion_hash = data.get("hash", "")
+    if not suggestion_hash:
+        raise HTTPException(400, "hash required")
+    from stockpulse.portfolio.advisor import acknowledge_suggestion
+    success = acknowledge_suggestion(suggestion_hash)
+    return {"status": "acknowledged" if success else "not_found"}
+
+@app.post("/api/advisor/evaluate")
+def trigger_advisor():
+    import threading
+    def _run():
+        from stockpulse.portfolio.advisor import evaluate
+        recs = _get_latest_scan()
+        evaluate(recs, scan_trigger="manual")
+    threading.Thread(target=_run, daemon=True).start()
+    return {"status": "started"}
+
+@app.get("/api/advisor/plan")
+def get_advisor_plan():
+    from stockpulse.portfolio.advisor import _load_state
+    state = _load_state()
+    return state.get("eod_plan", {"summary": "No EOD plan generated yet.", "sections": [], "total_suggestions": 0})
+
+@app.get("/api/advisor/config")
+def get_advisor_config():
+    from stockpulse.config.settings import load_strategies
+    return load_strategies().get("portfolio_advisor", {})
 
 
 @app.post("/api/watchlist/add")

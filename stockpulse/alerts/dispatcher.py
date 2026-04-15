@@ -8,12 +8,15 @@ from stockpulse.config.settings import load_strategies
 logger = logging.getLogger(__name__)
 
 def dispatch_alert(alert: dict) -> dict[str, bool]:
-    thresholds = load_strategies().get("thresholds", {})
-    confidence_min = thresholds.get("confidence_min", 30)
-    if alert.get("confidence", 0) < confidence_min:
-        logger.debug("Alert for %s suppressed: confidence %d < %d",
-            alert.get("ticker"), alert.get("confidence", 0), confidence_min)
-        return {"suppressed": True}
+    # Advisor alerts bypass confidence threshold — they have their own severity system
+    is_advisor = alert.get("severity") is not None or (alert.get("type", "") or "").startswith("advisor_")
+    if not is_advisor:
+        thresholds = load_strategies().get("thresholds", {})
+        confidence_min = thresholds.get("confidence_min", 30)
+        if alert.get("confidence", 0) < confidence_min:
+            logger.debug("Alert for %s suppressed: confidence %d < %d",
+                alert.get("ticker"), alert.get("confidence", 0), confidence_min)
+            return {"suppressed": True}
     results = {}
     results["log"] = send_log_alert(alert)
     results["telegram"] = send_telegram_alert(alert)

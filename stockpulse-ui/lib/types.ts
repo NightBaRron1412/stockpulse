@@ -96,3 +96,30 @@ export interface Alert {
 }
 
 export type Action = "BUY" | "WATCHLIST" | "HOLD" | "CAUTION" | "SELL";
+
+export interface AdvisorSuggestion {
+  severity: "urgent" | "actionable" | "info";
+  suggestion_type: string;
+  ticker: string;
+  action: string;
+  summary: string;
+  details: string;
+  score: number;
+  confidence: number;
+  hash: string;
+  suggested_amount?: number;
+  trim_fraction?: number;
+  swap_out_ticker?: string;
+  swap_out_score?: number;
+  swap_score_gap?: number;
+  tax_impact_note?: string;
+  wash_sale_warning: boolean;
+  persistence_count: number;
+  is_new: boolean;
+}
+
+export interface AdvisorResponse {
+  suggestions: AdvisorSuggestion[];
+  last_run: string | null;
+  scan_trigger: string | null;
+}

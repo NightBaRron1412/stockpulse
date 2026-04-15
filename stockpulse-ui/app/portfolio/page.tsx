@@ -12,14 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import type { Portfolio } from "@/lib/types";
 import { useState } from "react";
 import { TickerLink } from "@/components/ticker-link";
 
 export default function PortfolioPage() {
-  const { data, loading, error } = usePolling<Portfolio>(api.portfolio, 30000);
+  const { data, loading, error, refresh } = usePolling<any>(api.portfolio, 30000);
   const [sortKey, setSortKey] = useState<string>("pnl_pct");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [cashInput, setCashInput] = useState("");
+  const [savingCash, setSavingCash] = useState(false);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -76,24 +80,66 @@ export default function PortfolioPage() {
   }
 
   const drawdownPct = data.drawdown?.drawdown_pct ?? 0;
+  const cash = data.cash ?? 0;
+  const totalPortfolio = (data.total_current ?? 0) + cash;
 
   return (
     <div className="space-y-6">
       {pageHeader}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="glass-card p-5">
-          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Invested</p>
-          <p className="text-2xl font-bold font-mono-data text-slate-200">
-            ${(data.total_invested ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Portfolio</p>
+          <p className="text-2xl font-bold font-mono-data text-blue-400">
+            ${totalPortfolio.toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
+          <p className="text-xs text-slate-500 mt-0.5">positions + cash</p>
         </div>
         <div className="glass-card p-5">
-          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Current Value</p>
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Positions Value</p>
           <p className="text-2xl font-bold font-mono-data text-slate-200">
             ${(data.total_current ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
+        </div>
+        <div className="glass-card p-5">
+          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Cash Reserve</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold font-mono-data text-green-400">
+              ${cash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          {totalPortfolio > 0 && (
+            <p className="text-xs text-slate-500 mt-0.5">{((cash / totalPortfolio) * 100).toFixed(1)}% of portfolio</p>
+          )}
+          <div className="flex items-center gap-1.5 mt-2">
+            <div className="relative flex-1">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-[10px]">$</span>
+              <Input
+                className="pl-4 h-7 text-xs bg-slate-800/50 border-slate-700/50 font-mono-data"
+                placeholder={cash.toFixed(0)}
+                value={cashInput}
+                onChange={(e) => setCashInput(e.target.value)}
+                type="number"
+                min={0}
+                step={100}
+              />
+            </div>
+            <Button size="sm" className="h-7 text-[10px] px-2" disabled={savingCash} onClick={async () => {
+              const val = parseFloat(cashInput.replace(/,/g, ""));
+              if (!isNaN(val) && val >= 0) {
+                setSavingCash(true);
+                try {
+                  await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"}/api/portfolio/cash`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ cash: val }),
+                  });
+                  setCashInput("");
+                  refresh();
+                } finally { setSavingCash(false); }
+              }
+            }}>Set</Button>
+          </div>
         </div>
         <div className="glass-card p-5">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total P&L</p>

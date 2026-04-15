@@ -54,12 +54,19 @@ def get_price_history(
     if cached is not None:
         return cached
 
+    # Use start/end dates instead of period to avoid yfinance 'possibly delisted' bug
+    period_days = {"1y": 365, "6mo": 180, "3mo": 90, "1mo": 30, "5d": 5}
+    days = period_days.get(period, 365)
+    start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
     try:
-        t = yf.Ticker(ticker)
-        df = t.history(period=period, interval=interval)
+        df = yf.download(ticker, start=start, interval=interval, progress=False, timeout=15)
         if df.empty:
             logger.warning("No price data for %s", ticker)
             return pd.DataFrame()
+        # yf.download returns MultiIndex columns for single ticker — flatten
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         set_cached(cache_key, df)
         return df
     except Exception:
@@ -167,29 +174,43 @@ def get_news(ticker: str) -> list[dict]:
         return []
 
 
-def bulk_download(tickers: list[str], period: str = "6mo") -> dict[str, pd.DataFrame]:
-    """Download price data for multiple tickers via yfinance bulk download."""
-    cache_key = f"bulk_{'_'.join(sorted(tickers[:20]))}_{period}"
-    cached = get_cached(cache_key)
-    if cached is not None:
-        return cached
+def bulk_download(tickers: list[str], period: str = "1y") -> dict[str, pd.DataFrame]:
+    """Download price data for multiple tickers via yfinance bulk download.
+
+    Uses explicit start/end dates instead of period='1y' to avoid
+    yfinance bug where period-based requests randomly fail with
+    'possibly delisted' for valid tickers.
+    """
+    # Convert period to start date
+    period_days = {"1y": 365, "6mo": 180, "3mo": 90, "1mo": 30, "5d": 5}
+    days = period_days.get(period, 365)
+    start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    end = datetime.now().strftime("%Y-%m-%d")
 
     try:
         data = yf.download(
-            tickers, period=period, group_by="ticker", threads=True, progress=False
+            tickers, start=start, end=end, group_by="ticker", threads=True,
+            progress=False, timeout=30,
         )
         result = {}
+        # Flatten MultiIndex columns if single ticker
+        if isinstance(data.columns, pd.MultiIndex) and len(tickers) == 1:
+            data.columns = data.columns.get_level_values(0)
+
         if len(tickers) == 1:
-            result[tickers[0]] = data
+            if not data.empty:
+                result[tickers[0]] = data
+                set_cached(f"price_{tickers[0]}_{period}_1d", data)
         else:
             for ticker in tickers:
                 try:
                     df = data[ticker].dropna(how="all")
-                    if not df.empty:
+                    if not df.empty and len(df) >= 10:
                         result[ticker] = df
+                        # Cache individual tickers for intraday single lookups
+                        set_cached(f"price_{ticker}_{period}_1d", df)
                 except (KeyError, AttributeError):
                     continue
-        set_cached(cache_key, result)
         return result
     except Exception:
         logger.exception("Bulk download failed")

@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
-from stockpulse.config.settings import load_watchlists
+from stockpulse.config.settings import load_watchlists, load_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -46,4 +46,11 @@ def get_full_universe() -> list[str]:
     sp500 = get_sp500_tickers()
     user = get_user_watchlist()
     combined = list(dict.fromkeys(sp500 + user))
+
+    # Apply Shariah filter if enabled
+    filters = load_strategies().get("filters", {})
+    if filters.get("shariah_only", False):
+        from stockpulse.filters.shariah import screen_universe
+        combined = screen_universe(combined)
+
     return combined

@@ -56,7 +56,7 @@ def check_confirmation_buckets(signals: dict) -> dict:
     }
 
 
-def compute_all_signals(ticker: str, df: pd.DataFrame) -> dict:
+def compute_all_signals(ticker: str, df: pd.DataFrame, use_llm: bool = True) -> dict:
     strat = load_strategies()
     signal_cfg = strat.get("signals", {})
     signals = {}
@@ -75,7 +75,6 @@ def compute_all_signals(ticker: str, df: pd.DataFrame) -> dict:
             signals[name] = {"score": 0.0, "weight": 0.0, "value": None}
     fundamental_calculators = {
         "earnings": calc_earnings_signal, "sec_filing": calc_sec_filing_signal,
-        "news_sentiment": calc_news_sentiment_signal,
     }
     for name, calc_fn in fundamental_calculators.items():
         try:
@@ -85,6 +84,15 @@ def compute_all_signals(ticker: str, df: pd.DataFrame) -> dict:
         except Exception:
             logger.debug("Signal %s failed for %s", name, ticker)
             signals[name] = {"score": 0.0, "weight": 0.0, "value": None}
+
+    # News sentiment (LLM or keyword fallback)
+    try:
+        score = calc_news_sentiment_signal(ticker, use_llm=use_llm)
+        weight = signal_cfg.get("news_sentiment", {}).get("weight", 0.0)
+        signals["news_sentiment"] = {"score": score, "weight": weight, "value": score}
+    except Exception:
+        logger.debug("Signal news_sentiment failed for %s", ticker)
+        signals["news_sentiment"] = {"score": 0.0, "weight": 0.0, "value": None}
 
     # Relative strength vs SPY + sector (needs ticker name and DataFrame)
     try:

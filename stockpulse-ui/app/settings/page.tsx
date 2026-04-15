@@ -17,6 +17,7 @@ const BOOLEAN_KEYS = new Set([
   "max_one_name_per_cluster",
   "add_to_full_only_on_buy_upgrade",
   "never_average_down_watchlist",
+  "shariah_only",
 ]);
 
 const INTEGER_KEYS = new Set([
@@ -177,6 +178,10 @@ export default function SettingsPage() {
   const [editingAllocation, setEditingAllocation] = useState(false);
   const [editedAllocation, setEditedAllocation] = useState<Record<string, string> | null>(null);
   const [editingRisk, setEditingRisk] = useState(false);
+  const [editedFilters, setEditedFilters] = useState<Record<string, string> | null>(null);
+  const [editingFilters, setEditingFilters] = useState(false);
+  const [editingAdvisor, setEditingAdvisor] = useState(false);
+  const [editedAdvisor, setEditedAdvisor] = useState<Record<string, string> | null>(null);
 
   const handleAdd = useCallback(async () => {
     const t = addTicker.trim().toUpperCase();
@@ -225,14 +230,30 @@ export default function SettingsPage() {
           else { const num = Number(v); update.allocation[k] = isNaN(num) ? v : num; }
         }
       }
+      if (editedFilters) {
+        update.filters = {};
+        for (const [k, v] of Object.entries(editedFilters)) {
+          if (v === "true" || v === "false") update.filters[k] = v === "true";
+          else update.filters[k] = v;
+        }
+      }
+      if (editedAdvisor) {
+        update.portfolio_advisor = {};
+        for (const [k, v] of Object.entries(editedAdvisor)) {
+          if (v === "true" || v === "false") update.portfolio_advisor[k] = v === "true";
+          else { const num = Number(v); update.portfolio_advisor[k] = isNaN(num) ? v : num; }
+        }
+      }
       await api.updateConfig(update);
       setEditedThresholds(null);
       setEditedRisk(null);
       setEditedSchedule(null);
       setEditedAllocation(null);
+      setEditedFilters(null);
+      setEditedAdvisor(null);
       refresh();
     } finally { setSaving(false); }
-  }, [editedThresholds, editedRisk, editedSchedule, editedAllocation, refresh]);
+  }, [editedThresholds, editedRisk, editedSchedule, editedAllocation, editedFilters, editedAdvisor, refresh]);
 
   if (loading) {
     return (
@@ -259,6 +280,7 @@ export default function SettingsPage() {
   const risk = config?.risk ?? {};
   const scheduling = config?.scheduling ?? {};
   const allocation = config?.allocation ?? {};
+  const filters = config?.filters ?? {};
   const maxWeight = Math.max(...Object.values(weights).map((w: any) => Number(w) || 0), 0.01);
 
   const currentThresholds = editedThresholds ?? Object.fromEntries(
@@ -424,6 +446,57 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-300">Filters</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Control which stocks are included in the scan universe</p>
+          </div>
+          {!editingFilters ? (
+            <Button variant="outline" size="sm" onClick={() => {
+              const vals: Record<string, string> = {};
+              for (const [k, v] of Object.entries(filters)) { vals[k] = String(v); }
+              setEditedFilters(vals);
+              setEditingFilters(true);
+            }} className="border-slate-700 text-xs">Edit</Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => { handleSaveConfig(); setEditingFilters(false); }}
+                disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
+                {saving ? "Saving..." : "Save"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setEditedFilters(null); setEditingFilters(false); }}
+                className="border-slate-700 text-xs">Cancel</Button>
+            </div>
+          )}
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between py-2 border-b border-slate-700/30">
+            <div>
+              <p className="text-sm text-slate-300">Shariah Compliant Only</p>
+              <p className="text-xs text-slate-500">Filter scan universe to Shariah-compliant stocks (excludes banks, insurance, alcohol, tobacco, gambling, weapons, high-debt)</p>
+            </div>
+            <div className="ml-4">
+              {editingFilters && editedFilters ? (
+                <select
+                  value={editedFilters["shariah_only"] ?? String(filters.shariah_only ?? false)}
+                  onChange={(e) => setEditedFilters({ ...editedFilters, shariah_only: e.target.value })}
+                  className="bg-slate-800/50 border border-slate-700/50 h-8 text-sm font-mono-data rounded-md px-2 text-slate-200 w-20"
+                >
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              ) : (
+                <span className={cn("font-mono-data text-sm", filters.shariah_only ? "text-green-400" : "text-slate-500")}>
+                  {filters.shariah_only ? "Yes" : "No"}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Allocation Rules */}
       {Object.keys(allocation).length > 0 && (
         <div className="glass-card p-6">
@@ -537,6 +610,123 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Portfolio Advisor */}
+      {Object.keys(config?.portfolio_advisor ?? {}).length > 0 && (() => {
+        const pa = config?.portfolio_advisor ?? {};
+        const advisorFields = [
+          { key: "cash_reserve_min", label: "Cash Reserve Minimum", desc: "Min % of portfolio as cash (0.12 = 12%)", kind: "float" as const, editable: true },
+          { key: "evaluate_after_every_scan", label: "Evaluate After Every Scan", desc: "Run advisor after morning, intraday, and EOD scans", kind: "boolean" as const, editable: true },
+          { key: "push_only_on_state_change", label: "Alert Only On State Change", desc: "Only push notifications for new suggestions", kind: "boolean" as const, editable: true },
+          { key: "suggest_exit_on_sell", label: "Suggest Exit On SELL", desc: "Recommend full exit when signal drops to SELL", kind: "boolean" as const, editable: true },
+          { key: "never_swap_into_watchlist", label: "Never Swap Into WATCHLIST", desc: "Block selling to fund WATCHLIST starters", kind: "boolean" as const, editable: true },
+          { key: "taxable_account_show_tax_impact", label: "Show Tax Impact", desc: "Show gain/loss estimates on sell suggestions", kind: "boolean" as const, editable: true },
+          { key: "show_wash_sale_warning", label: "Wash Sale Warning", desc: "Warn when buying a ticker sold within 30 days", kind: "boolean" as const, editable: true },
+        ];
+        return (
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-300">Portfolio Advisor</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Always-on evaluation engine with event-driven suggestions</p>
+            </div>
+            {!editingAdvisor ? (
+              <Button variant="outline" size="sm" onClick={() => {
+                const vals: Record<string, string> = {};
+                advisorFields.filter(f => f.editable).forEach(f => { vals[f.key] = String(pa[f.key] ?? ""); });
+                setEditedAdvisor(vals);
+                setEditingAdvisor(true);
+              }} className="border-slate-700 text-xs">Edit</Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => { handleSaveConfig(); setEditingAdvisor(false); }}
+                  disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => { setEditedAdvisor(null); setEditingAdvisor(false); }}
+                  className="border-slate-700 text-xs">Cancel</Button>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {advisorFields.map(({ key, label, desc, kind, editable }) => {
+              const val = pa[key];
+              return (
+                <div key={key} className="flex items-center justify-between py-2 border-b border-slate-700/30">
+                  <div>
+                    <p className="text-sm text-slate-300">{label}</p>
+                    <p className="text-xs text-slate-500">{desc}</p>
+                  </div>
+                  <div className="ml-4">
+                    {editingAdvisor && editable && editedAdvisor ? (
+                      kind === "boolean" ? (
+                        <select
+                          value={editedAdvisor[key] ?? String(val)}
+                          onChange={(e) => setEditedAdvisor({ ...editedAdvisor, [key]: e.target.value })}
+                          className="bg-slate-800/50 border border-slate-700/50 h-8 text-sm font-mono-data rounded-md px-2 text-slate-200 w-20"
+                        >
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      ) : (
+                        <Input
+                          type="number"
+                          step={0.01}
+                          min={0}
+                          max={1}
+                          value={editedAdvisor[key] ?? String(val)}
+                          onChange={(e) => setEditedAdvisor({ ...editedAdvisor, [key]: e.target.value })}
+                          className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24"
+                        />
+                      )
+                    ) : kind === "boolean" ? (
+                      <span className={cn("font-mono-data text-sm", val ? "text-green-400" : "text-slate-500")}>
+                        {val ? "Yes" : "No"}
+                      </span>
+                    ) : (
+                      <span className="font-mono-data text-sm text-slate-200">{val}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Read-only nested configs */}
+            {pa.suggest_trim_on_caution && (
+              <div className="pt-2">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Trim on CAUTION</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Enabled</span><span className={cn("font-mono-data", pa.suggest_trim_on_caution.enabled ? "text-green-400" : "text-slate-500")}>{pa.suggest_trim_on_caution.enabled ? "Yes" : "No"}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Persistence</span><span className="font-mono-data text-slate-300">{pa.suggest_trim_on_caution.require_persistence_scans} scans</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Trim fraction</span><span className="font-mono-data text-slate-300">{(pa.suggest_trim_on_caution.trim_fraction * 100).toFixed(0)}%</span></div>
+                </div>
+              </div>
+            )}
+            {pa.suggest_swap_to_fund_buy && (
+              <div className="pt-2">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Swap Rules</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Enabled</span><span className={cn("font-mono-data", pa.suggest_swap_to_fund_buy.enabled ? "text-green-400" : "text-slate-500")}>{pa.suggest_swap_to_fund_buy.enabled ? "Yes" : "No"}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Min score</span><span className="font-mono-data text-slate-300">{pa.suggest_swap_to_fund_buy.incoming_min_score}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Min score gap</span><span className="font-mono-data text-slate-300">{pa.suggest_swap_to_fund_buy.min_score_gap}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Max swaps/day</span><span className="font-mono-data text-slate-300">{pa.suggest_swap_to_fund_buy.max_swaps_per_day}</span></div>
+                </div>
+              </div>
+            )}
+            {pa.turnover && (
+              <div className="pt-2">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Turnover Guardrails</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Max trims/week/pos</span><span className="font-mono-data text-slate-300">{pa.turnover.max_trims_per_week_per_position}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Min hold days</span><span className="font-mono-data text-slate-300">{pa.turnover.min_hold_trading_days}</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        );
+      })()}
 
       {/* Backtesting */}
       <div className="glass-card p-6">

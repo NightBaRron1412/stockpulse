@@ -22,6 +22,7 @@ def morning_scan_job():
             "thesis": f"Morning scan complete: {buys} BUY, {sells} SELL signals from {len(recommendations)} tickers",
             "type": "summary", "technical_summary": f"Report at {report_path}",
             "catalyst_summary": "", "invalidation": ""})
+        _run_advisor("morning_scan", recommendations)
     except Exception:
         logger.exception("Morning scan failed")
 
@@ -63,6 +64,7 @@ def intraday_check_job():
             logger.info("Intraday: %d changes detected", len(changes))
         else:
             logger.info("Intraday: no changes detected")
+        _run_advisor("intraday", recommendations)
     except Exception:
         logger.exception("Intraday check failed")
 
@@ -74,6 +76,7 @@ def eod_recap_job():
         recommendations = run_watchlist_scan(tickers) if tickers else run_full_scan()
         report_path = generate_eod_report(recommendations)
         logger.info("EOD recap complete. Report: %s", report_path)
+        _run_eod_plan(recommendations)
 
         # Review past signal performance
         from stockpulse.research.tracker import review_signals
@@ -168,6 +171,76 @@ def _send_validation_report(n_buy: int, validation: dict):
         "catalyst_summary": "",
         "invalidation": "",
     })
+
+
+def _run_advisor(scan_trigger: str, recommendations: list[dict] | None = None):
+    """Run advisor evaluation after a scan. Fail-safe — never breaks the scan pipeline."""
+    try:
+        from stockpulse.portfolio.advisor import evaluate
+        from stockpulse.config.settings import load_strategies
+        config = load_strategies().get("portfolio_advisor", {})
+        if not config.get("evaluate_after_every_scan", True):
+            return
+
+        suggestions = evaluate(recommendations or [], scan_trigger=scan_trigger)
+        if not suggestions:
+            logger.info("Advisor: no suggestions")
+            return
+
+        # Dispatch new suggestions only
+        push_new_only = config.get("push_only_on_state_change", True)
+        for s in suggestions:
+            if not push_new_only or s.is_new:
+                alert = {
+                    "ticker": s.ticker, "action": s.action,
+                    "confidence": s.confidence,
+                    "thesis": s.summary, "type": f"advisor_{s.suggestion_type.value}",
+                    "technical_summary": s.details,
+                    "catalyst_summary": "", "invalidation": "",
+                    "severity": s.severity.value,
+                }
+                dispatch_alert(alert)
+
+        urgent = sum(1 for s in suggestions if s.severity.value == "urgent")
+        actionable = sum(1 for s in suggestions if s.severity.value == "actionable")
+        info = sum(1 for s in suggestions if s.severity.value == "info")
+        logger.info("Advisor (%s): %d suggestions (%d urgent, %d actionable, %d info)",
+                     scan_trigger, len(suggestions), urgent, actionable, info)
+    except Exception:
+        logger.exception("Advisor evaluation failed")
+
+
+def _run_eod_plan(recommendations: list[dict]):
+    """Generate consolidated EOD portfolio plan and send summary to Telegram."""
+    try:
+        from stockpulse.portfolio.advisor import generate_eod_plan
+        plan = generate_eod_plan(recommendations)
+
+        if plan["total_suggestions"] == 0:
+            logger.info("EOD plan: no changes recommended")
+            return
+
+        # Send consolidated summary as one Telegram message
+        dispatch_alert({
+            "ticker": "EOD PLAN",
+            "action": "INFO",
+            "confidence": 100,
+            "thesis": plan["summary"],
+            "type": "advisor_eod_plan",
+            "technical_summary": (
+                f"Urgent: {plan['urgent_count']} | "
+                f"Actionable: {plan['actionable_count']} | "
+                f"Info: {plan['info_count']} | "
+                f"Net cash impact: ${plan['net_cash_impact']:+,.0f}"
+            ),
+            "catalyst_summary": "",
+            "invalidation": "",
+            "severity": "actionable" if plan["urgent_count"] > 0 or plan["actionable_count"] > 0 else "info",
+        })
+
+        logger.info("EOD plan: %s", plan["summary"])
+    except Exception:
+        logger.exception("EOD plan generation failed")
 
 
 def weekly_digest_job():

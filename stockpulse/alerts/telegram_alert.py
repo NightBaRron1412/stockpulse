@@ -6,6 +6,10 @@ from stockpulse.config.settings import get_config
 logger = logging.getLogger(__name__)
 
 def _format_message(alert: dict) -> str:
+    # Advisor alerts get severity-based formatting
+    if alert.get("severity"):
+        return _format_advisor_message(alert)
+
     ticker = alert.get("ticker", "???")
     action = alert.get("action", "???")
     confidence = alert.get("confidence", 0)
@@ -14,6 +18,30 @@ def _format_message(alert: dict) -> str:
              "WATCHLIST": "\ud83d\udd0d", "CAUTION": "\ud83d\udea8"}.get(action, "\u2139\ufe0f")
     alert_type = alert.get("type", "signal")
     msg = f"{emoji} {ticker} — {action} ({confidence}%)\n\n{thesis}\n\n[{alert_type}]"
+    if len(msg) > 4000:
+        msg = msg[:3997] + "..."
+    return msg
+
+
+def _format_advisor_message(alert: dict) -> str:
+    severity = alert.get("severity", "info")
+    prefix = {
+        "urgent": "\U0001f6a8 URGENT",
+        "actionable": "\U0001f4cb ACTION",
+        "info": "\u2139\ufe0f INFO",
+    }.get(severity, "\U0001f4cb")
+
+    ticker = alert.get("ticker", "???")
+    action = alert.get("action", "???")
+    summary = alert.get("thesis", "")
+    details = alert.get("technical_summary", "")
+    stype = alert.get("type", "advisor")
+
+    msg = f"{prefix} | {ticker} -- {action}\n\n{summary}"
+    if details:
+        msg += f"\n\n{details}"
+    msg += f"\n\n[{stype}]"
+
     if len(msg) > 4000:
         msg = msg[:3997] + "..."
     return msg

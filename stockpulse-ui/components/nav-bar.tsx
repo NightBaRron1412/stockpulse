@@ -14,6 +14,7 @@ const navItems = [
   { href: "/portfolio", label: "Portfolio" },
   { href: "/signals", label: "Signals" },
   { href: "/validation", label: "Validation" },
+  { href: "/advisor", label: "Advisor" },
   { href: "/reports", label: "Reports" },
   { href: "/settings", label: "Settings" },
 ];
@@ -81,6 +82,21 @@ export function NavBar() {
           })}
         </div>
         <div className="ml-auto flex items-center gap-4">
+          {/* Scan status indicator */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <div
+              className={cn(
+                "w-2 h-2 rounded-full",
+                isScanning ? "bg-blue-500 pulse-scan" : "bg-green-500"
+              )}
+            />
+            <span>
+              {isScanning
+                ? `Scanning${scanStatus?.progress ? ` ${scanStatus.progress}` : ""}`
+                : "Idle"}
+            </span>
+          </div>
+
           {/* Notification bell with dropdown */}
           <div className="relative">
             <button
@@ -161,20 +177,6 @@ export function NavBar() {
             )}
           </div>
 
-          {/* Scan status indicator */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                isScanning ? "bg-blue-500 pulse-scan" : "bg-green-500"
-              )}
-            />
-            <span>
-              {isScanning
-                ? `Scanning${scanStatus?.progress ? ` ${scanStatus.progress}` : ""}`
-                : "Idle"}
-            </span>
-          </div>
         </div>
       </div>
       {menuOpen && (

@@ -13,14 +13,28 @@ def run_full_scan(tickers: list[str] | None = None) -> list[dict]:
     if tickers is None:
         tickers = get_full_universe()
     logger.info("Starting full scan of %d tickers at %s", len(tickers), datetime.now())
+
+    # Bulk download all price data in parallel (much faster than one-by-one)
+    from stockpulse.data.provider import bulk_download
+    logger.info("Bulk downloading price data for %d tickers...", len(tickers))
+    batch_size = 100
+    all_data: dict = {}
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i:i + batch_size]
+        batch_data = bulk_download(batch, period="1y")
+        all_data.update(batch_data)
+        logger.info("Downloaded %d/%d tickers", min(i + batch_size, len(tickers)), len(tickers))
+
+    logger.info("Price data ready: %d tickers with data", len(all_data))
+
     recommendations = []
     for i, ticker in enumerate(tickers):
         try:
-            df = get_price_history(ticker, period="1y")
-            if df.empty or len(df) < 50:
-                logger.debug("Skipping %s: insufficient data (%d rows)", ticker, len(df))
+            df = all_data.get(ticker)
+            if df is None or df.empty or len(df) < 50:
                 continue
-            rec = generate_recommendation(ticker, df)
+            # Full scans use keyword fallback for news (LLM too slow for 500+ tickers)
+            rec = generate_recommendation(ticker, df, use_llm=False)
             recommendations.append(rec)
             if (i + 1) % 50 == 0:
                 logger.info("Scanned %d/%d tickers", i + 1, len(tickers))
