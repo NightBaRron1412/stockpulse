@@ -39,21 +39,44 @@ def intraday_check_job():
         recommendations = run_watchlist_scan(all_tickers)
         changes = detect_changes(recommendations)
         if changes:
-            generate_intraday_report(changes)
+            # Separate tier changes from score movements
+            tier_changes = [c for c in changes if c.get("type") == "action_change"]
+            score_moves = [c for c in changes if c.get("type") == "score_movement"]
+            approaching = [c for c in changes if c.get("type") == "approaching_threshold"]
+
+            if tier_changes:
+                generate_intraday_report(tier_changes)
+
             for change in changes:
-                # Ensure alert has the right field names for dispatcher
+                change_type = change.get("type", "action_change")
+                if change_type == "action_change":
+                    thesis = f"{change['ticker']}: {change.get('previous_action', '?')} → {change['new_action']}. {change.get('thesis', '')}"
+                elif change_type == "score_movement":
+                    thesis = change.get("thesis", "")
+                elif change_type == "approaching_threshold":
+                    thesis = change.get("thesis", "")
+                else:
+                    thesis = change.get("thesis", "")
+
                 alert = {
                     "ticker": change["ticker"],
                     "action": change["new_action"],
                     "confidence": change.get("confidence", 50),
-                    "thesis": f"{change['ticker']}: {change.get('previous_action', '?')} → {change['new_action']}. {change.get('thesis', '')}",
-                    "type": "action_change",
+                    "thesis": thesis,
+                    "type": change_type,
                     "technical_summary": "",
                     "catalyst_summary": "",
                     "invalidation": "",
                 }
-                dispatch_alert(alert)
-            # Track BUY/WATCHLIST signals from intraday changes for performance validation
+                # Only send Telegram for tier changes and approaching threshold
+                if change_type in ("action_change", "approaching_threshold"):
+                    dispatch_alert(alert)
+                else:
+                    # Score movements: log only, don't spam Telegram
+                    from stockpulse.alerts.log_alert import send_log_alert
+                    send_log_alert(alert)
+
+            # Track BUY/WATCHLIST signals for performance validation
             for rec in recommendations:
                 if rec.get("action") in ("BUY", "WATCHLIST"):
                     try:
@@ -61,7 +84,8 @@ def intraday_check_job():
                         log_signal(rec)
                     except Exception:
                         pass
-            logger.info("Intraday: %d changes detected", len(changes))
+            logger.info("Intraday: %d changes (%d tier, %d score, %d approaching)",
+                        len(changes), len(tier_changes), len(score_moves), len(approaching))
         else:
             logger.info("Intraday: no changes detected")
         _run_advisor("intraday", recommendations)

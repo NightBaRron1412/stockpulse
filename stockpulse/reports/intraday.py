@@ -28,18 +28,77 @@ def _save_previous_actions(actions: dict[str, str]) -> None:
 
 
 def detect_changes(recommendations: list[dict]) -> list[dict]:
-    previous_actions = _load_previous_actions()
+    """Detect tier changes AND significant score movements.
+
+    Returns changes for:
+    - Action tier transitions (HOLD → WATCHLIST, etc.)
+    - Score movements > 8 points within the same tier
+    - Tickers approaching tier boundaries (within 5 points)
+    """
+    previous = _load_previous_actions()
     changes = []
+
     for rec in recommendations:
         ticker = rec["ticker"]
         current_action = rec["action"]
-        prev_action = previous_actions.get(ticker)
-        if prev_action is not None and prev_action != current_action:
-            changes.append({"ticker": ticker, "previous_action": prev_action,
-                "new_action": current_action, "confidence": rec["confidence"],
-                "thesis": rec["thesis"], "type": "action_change"})
-        previous_actions[ticker] = current_action
-    _save_previous_actions(previous_actions)
+        current_score = rec.get("composite_score", 0)
+
+        prev_entry = previous.get(ticker)
+        if isinstance(prev_entry, str):
+            # Legacy format: just action string. Migrate.
+            prev_action = prev_entry
+            prev_score = 0
+        elif isinstance(prev_entry, dict):
+            prev_action = prev_entry.get("action")
+            prev_score = prev_entry.get("score", 0)
+        else:
+            prev_action = None
+            prev_score = 0
+
+        if prev_action is not None:
+            # 1. Tier change
+            if prev_action != current_action:
+                changes.append({
+                    "ticker": ticker,
+                    "previous_action": prev_action,
+                    "new_action": current_action,
+                    "confidence": rec.get("confidence", 0),
+                    "thesis": rec.get("thesis", ""),
+                    "type": "action_change",
+                    "score_delta": round(current_score - prev_score, 1),
+                })
+            else:
+                # 2. Significant score movement (>8 points within same tier)
+                delta = current_score - prev_score
+                if abs(delta) >= 8:
+                    direction = "improved" if delta > 0 else "deteriorated"
+                    changes.append({
+                        "ticker": ticker,
+                        "previous_action": prev_action,
+                        "new_action": current_action,
+                        "confidence": rec.get("confidence", 0),
+                        "thesis": f"{ticker} {direction} {abs(delta):.1f} pts ({prev_score:+.1f} → {current_score:+.1f})",
+                        "type": "score_movement",
+                        "score_delta": round(delta, 1),
+                    })
+
+                # 3. Approaching tier boundary (within 5 points of BUY threshold)
+                buy_threshold = 55
+                if current_action == "WATCHLIST" and current_score >= buy_threshold - 5 and prev_score < buy_threshold - 5:
+                    changes.append({
+                        "ticker": ticker,
+                        "previous_action": prev_action,
+                        "new_action": current_action,
+                        "confidence": rec.get("confidence", 0),
+                        "thesis": f"{ticker} approaching BUY threshold ({current_score:+.1f}, need {buy_threshold})",
+                        "type": "approaching_threshold",
+                        "score_delta": round(delta, 1),
+                    })
+
+        # Save current state (action + score)
+        previous[ticker] = {"action": current_action, "score": round(current_score, 1)}
+
+    _save_previous_actions(previous)
     return changes
 
 def generate_intraday_report(changes: list[dict]) -> str | None:

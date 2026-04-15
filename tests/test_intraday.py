@@ -70,10 +70,10 @@ def test_detect_changes_saves_state(mock_load, mock_save):
         {"ticker": "B", "action": "HOLD", "confidence": 10, "thesis": "flat"},
     ]
     detect_changes(recs)
-    # Verify save was called with the updated actions
+    # Verify save was called with the updated actions (now dict with action + score)
     saved = mock_save.call_args[0][0]
-    assert saved["A"] == "BUY"
-    assert saved["B"] == "HOLD"
+    assert saved["A"]["action"] == "BUY"
+    assert saved["B"]["action"] == "HOLD"
 
 
 @patch("stockpulse.reports.intraday._save_previous_actions", side_effect=_mock_save)
