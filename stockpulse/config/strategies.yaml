@@ -170,7 +170,7 @@ portfolio_advisor:
   evaluate_after_every_scan: true
   push_only_on_state_change: true
   manual_execution: true
-  cash_reserve_min: 0
+  cash_reserve_min: 0.12
   allow_watchlist_starters: true
   watchlist_starter_cash_only: true
   watchlist_starter_max_size_of_buy: 0.33
