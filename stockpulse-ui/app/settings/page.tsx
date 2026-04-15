@@ -50,11 +50,11 @@ type InputKind = "boolean" | "integer" | "float" | "text";
 
 const FIELD_RANGES: Record<string, { min?: number; max?: number }> = {
   watchlist_starter_size: { min: 0.01, max: 1.0 },
-  watchlist_starter_risk: { min: 0.01, max: 5.0 },
+  watchlist_starter_risk: { min: 0.05, max: 1.0 },
   max_watchlist_sleeve: { min: 0.01, max: 1.0 },
   max_position_pct: { min: 1, max: 25 },
   max_sector_pct: { min: 5, max: 50 },
-  risk_per_trade_pct: { min: 0.1, max: 5.0 },
+  risk_per_trade_pct: { min: 0.1, max: 2.0 },
   max_positions: { min: 1, max: 20 },
   max_watchlist_names: { min: 1, max: 10 },
   drawdown_half: { min: 1, max: 30 },
@@ -452,7 +452,7 @@ export default function SettingsPage() {
               { key: "watchlist_starter_enabled", label: "Starter Enabled", desc: "Allow WATCHLIST starter positions" },
               { key: "watchlist_starter_min_score", label: "Min Score", desc: "Minimum composite score for starter eligibility" },
               { key: "watchlist_starter_size", label: "Starter Size", desc: "Fraction of full BUY size (0.33 = 33%)" },
-              { key: "watchlist_starter_risk", label: "Starter Risk %", desc: "Risk % of portfolio per starter trade (0.25 = 0.25%, vs 0.75% for BUY). Range: 0.01-5.0" },
+              { key: "watchlist_starter_risk", label: "Starter Risk %", desc: "Risk % of portfolio per starter trade (0.25 = 0.25%). BUY uses 0.75%. Max 1.0%." },
               { key: "max_watchlist_sleeve", label: "Max Sleeve", desc: "Max fraction of capital for WATCHLIST starters" },
               { key: "max_watchlist_names", label: "Max Names", desc: "Maximum WATCHLIST starter positions" },
               { key: "watchlist_exit_score", label: "Exit Score", desc: "Exit starter if score drops below this" },
