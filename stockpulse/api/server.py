@@ -166,21 +166,29 @@ def _get_scan_status() -> dict:
                 running = True
                 progress = latest_progress
             else:
-                # Check recent lines for short jobs (intraday, portfolio, SEC)
-                recent = lines[-5:] if len(lines) >= 5 else lines
-                started_job = None
+                # Track each job independently — a different job completing
+                # shouldn't mask one that's still running
+                recent = lines[-20:] if len(lines) >= 20 else lines
+                active_jobs: dict[str, bool] = {}
                 for line in recent:
                     if "--- Intraday check ---" in line:
-                        started_job = "Intraday Check"
+                        active_jobs["Intraday Check"] = True
                     elif "--- Portfolio check ---" in line:
-                        started_job = "Portfolio Check"
+                        active_jobs["Portfolio Check"] = True
                     elif "--- SEC filing scan ---" in line:
-                        started_job = "SEC Scan"
-                    elif "executed successfully" in line or "no changes" in line or "complete" in line:
-                        started_job = None
-                if started_job:
+                        active_jobs["SEC Scan"] = True
+                    # Match completion to specific job
+                    if "Intraday Check" in line and "executed successfully" in line:
+                        active_jobs.pop("Intraday Check", None)
+                    elif "Intraday:" in line and ("changes" in line or "no changes" in line):
+                        active_jobs.pop("Intraday Check", None)
+                    elif "Portfolio Check" in line and "executed successfully" in line:
+                        active_jobs.pop("Portfolio Check", None)
+                    elif "SEC Filing Scan" in line and "executed successfully" in line:
+                        active_jobs.pop("SEC Scan", None)
+                if active_jobs:
                     running = True
-                    current_job = started_job
+                    current_job = next(iter(active_jobs))
         except Exception:
             pass
     return {
