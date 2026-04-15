@@ -302,6 +302,21 @@ def update_cash(data: dict):
 
 _TICKER_ALIASES = {"GOLD": "GLD"}  # Wealthsimple gold → GLD proxy
 
+def _get_cad_to_usd() -> float:
+    """Get live CAD→USD exchange rate. Falls back to 0.72 if unavailable."""
+    try:
+        from stockpulse.data.cache import get_cached, set_cached
+        cached = get_cached("fx_cadusd")
+        if cached is not None:
+            return cached
+        import requests
+        resp = requests.get("https://api.exchangerate-api.com/v4/latest/CAD", timeout=5)
+        rate = resp.json().get("rates", {}).get("USD", 0.72)
+        set_cached("fx_cadusd", rate)
+        return rate
+    except Exception:
+        return 0.72
+
 
 def _parse_wealthsimple_text(text: str) -> list[dict]:
     """Parse pasted Wealthsimple portfolio text into positions.
@@ -380,7 +395,7 @@ def _parse_wealthsimple_text(text: str) -> list[dict]:
 
         if shares and shares > 0 and total_value and total_value > 0:
             if currency == "CAD":
-                total_value *= 0.72
+                total_value *= _get_cad_to_usd()
             entry_price = round(total_value / shares, 2)
             positions.append({
                 "ticker": ticker,
