@@ -584,7 +584,8 @@ def suggest_allocation(data: dict):
             f"Write a 3-4 sentence rationale explaining the allocation strategy. "
             f"Mention diversification, signal strength, and any risks. No disclaimers."
         )
-        rationale = _call_llm(prompt, max_tokens=200) or ""
+        from stockpulse.config.settings import get_config as _gc
+        rationale = _call_llm(prompt, max_tokens=200, model=_gc()["llm_model_premium"]) or ""
     except Exception:
         rationale = ""
 
