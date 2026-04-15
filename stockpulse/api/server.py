@@ -84,12 +84,15 @@ def _parse_activity_log() -> list[dict]:
                     events.append({"timestamp": ts, "type": "scan", "message": f"Morning scan: {msg}"})
                 except Exception:
                     pass
-            elif "changes detected" in line and "no " not in line:
-                try:
-                    count = line.split("Intraday: ")[1].split(" ")[0]
-                    events.append({"timestamp": ts, "type": "alert", "message": f"Intraday: {count} signal changes detected"})
-                except Exception:
-                    events.append({"timestamp": ts, "type": "alert", "message": "Intraday changes detected"})
+            elif "Intraday:" in line and "changes detected" in line:
+                if "no changes" in line:
+                    events.append({"timestamp": ts, "type": "scan", "message": "Intraday scan complete — no changes"})
+                else:
+                    try:
+                        count = line.split("Intraday: ")[1].split(" ")[0]
+                        events.append({"timestamp": ts, "type": "alert", "message": f"Intraday: {count} signal changes detected"})
+                    except Exception:
+                        events.append({"timestamp": ts, "type": "alert", "message": "Intraday changes detected"})
             elif "Auto-discovered" in line:
                 try:
                     msg = line.split("Auto-discovered ")[1]
