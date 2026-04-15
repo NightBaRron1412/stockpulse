@@ -51,11 +51,11 @@ type InputKind = "boolean" | "integer" | "float" | "text";
 
 const FIELD_RANGES: Record<string, { min?: number; max?: number }> = {
   watchlist_starter_size: { min: 0.01, max: 1.0 },
-  watchlist_starter_risk: { min: 0.05, max: 1.0 },
+  watchlist_starter_risk: { min: 0.01, max: 5.0 },
   max_watchlist_sleeve: { min: 0.01, max: 1.0 },
   max_position_pct: { min: 1, max: 25 },
   max_sector_pct: { min: 5, max: 50 },
-  risk_per_trade_pct: { min: 0.1, max: 2.0 },
+  risk_per_trade_pct: { min: 0.1, max: 5.0 },
   max_positions: { min: 1, max: 20 },
   max_watchlist_names: { min: 1, max: 10 },
   drawdown_half: { min: 1, max: 30 },
