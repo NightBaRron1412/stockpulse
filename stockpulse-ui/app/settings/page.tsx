@@ -182,6 +182,10 @@ export default function SettingsPage() {
   const [editingFilters, setEditingFilters] = useState(false);
   const [editingAdvisor, setEditingAdvisor] = useState(false);
   const [editedAdvisor, setEditedAdvisor] = useState<Record<string, string> | null>(null);
+  const [editingRegime, setEditingRegime] = useState(false);
+  const [editedRegime, setEditedRegime] = useState<Record<string, string> | null>(null);
+  const [editingProgressive, setEditingProgressive] = useState(false);
+  const [editedProgressive, setEditedProgressive] = useState<Record<string, string> | null>(null);
 
   const handleAdd = useCallback(async () => {
     const t = addTicker.trim().toUpperCase();
@@ -244,6 +248,30 @@ export default function SettingsPage() {
           else { const num = Number(v); update.portfolio_advisor[k] = isNaN(num) ? v : num; }
         }
       }
+      if (editedRegime) {
+        update.market_regime = {};
+        for (const [k, v] of Object.entries(editedRegime)) {
+          if (v === "true" || v === "false") update.market_regime[k] = v === "true";
+          else { const num = Number(v); update.market_regime[k] = isNaN(num) ? v : num; }
+        }
+      }
+      if (editedProgressive) {
+        // Nested under allocation.progressive_adds
+        if (!update.allocation) update.allocation = {};
+        const pa: any = {};
+        const sizing: any = {};
+        const limits: any = {};
+        for (const [k, v] of Object.entries(editedProgressive)) {
+          const num = Number(v);
+          const parsed = v === "true" ? true : v === "false" ? false : isNaN(num) ? v : num;
+          if (k.startsWith("sizing.")) sizing[k.replace("sizing.", "")] = parsed;
+          else if (k.startsWith("limits.")) limits[k.replace("limits.", "")] = parsed;
+          else pa[k] = parsed;
+        }
+        if (Object.keys(sizing).length) pa.sizing = sizing;
+        if (Object.keys(limits).length) pa.portfolio_limits = limits;
+        update.allocation.progressive_adds = pa;
+      }
       await api.updateConfig(update);
       setEditedThresholds(null);
       setEditedRisk(null);
@@ -251,9 +279,11 @@ export default function SettingsPage() {
       setEditedAllocation(null);
       setEditedFilters(null);
       setEditedAdvisor(null);
+      setEditedRegime(null);
+      setEditedProgressive(null);
       refresh();
     } finally { setSaving(false); }
-  }, [editedThresholds, editedRisk, editedSchedule, editedAllocation, editedFilters, editedAdvisor, refresh]);
+  }, [editedThresholds, editedRisk, editedSchedule, editedAllocation, editedFilters, editedAdvisor, editedRegime, editedProgressive, refresh]);
 
   if (loading) {
     return (
@@ -729,36 +759,71 @@ export default function SettingsPage() {
       })()}
 
       {/* Market Regime */}
-      {config?.market_regime && Object.keys(config.market_regime).length > 0 && (
+      {config?.market_regime && Object.keys(config.market_regime).length > 0 && (() => {
+        const mr = config.market_regime;
+        const regimeFields = [
+          { key: "enabled", label: "Enabled", kind: "boolean" as const },
+          { key: "vix_high", label: "VIX High Threshold", kind: "number" as const },
+          { key: "vix_extreme", label: "VIX Extreme Threshold", kind: "number" as const },
+          { key: "correction_threshold_pct", label: "Correction Threshold %", kind: "number" as const },
+        ];
+        return (
         <div className="glass-card p-6">
-          <div className="mb-4">
-            <h2 className="text-sm font-semibold text-slate-300">Market Regime</h2>
-            <p className="text-xs text-slate-500 mt-0.5">SPY trend + VIX + market breadth regime detection</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-300">Market Regime</h2>
+              <p className="text-xs text-slate-500 mt-0.5">SPY trend + VIX + market breadth regime detection</p>
+            </div>
+            {!editingRegime ? (
+              <Button variant="outline" size="sm" onClick={() => {
+                const vals: Record<string, string> = {};
+                regimeFields.forEach(f => { vals[f.key] = String(mr[f.key] ?? ""); });
+                setEditedRegime(vals);
+                setEditingRegime(true);
+              }} className="border-slate-700 text-xs">Edit</Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => { handleSaveConfig(); setEditingRegime(false); }}
+                  disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => { setEditedRegime(null); setEditingRegime(false); }}
+                  className="border-slate-700 text-xs">Cancel</Button>
+              </div>
+            )}
           </div>
           <div className="space-y-2">
-            {[
-              { key: "enabled", label: "Enabled", kind: "boolean" as const },
-              { key: "vix_high", label: "VIX High Threshold", kind: "number" as const },
-              { key: "vix_extreme", label: "VIX Extreme Threshold", kind: "number" as const },
-              { key: "correction_threshold_pct", label: "Correction Threshold %", kind: "number" as const },
-            ].map(({ key, label, kind }) => {
-              const val = config.market_regime[key];
+            {regimeFields.map(({ key, label, kind }) => {
+              const val = mr[key];
               return (
                 <div key={key} className="flex items-center justify-between py-1.5 border-b border-slate-700/30">
                   <p className="text-sm text-slate-300">{label}</p>
-                  {kind === "boolean" ? (
-                    <span className={cn("font-mono-data text-sm", val ? "text-green-400" : "text-slate-500")}>{val ? "Yes" : "No"}</span>
-                  ) : (
-                    <span className="font-mono-data text-sm text-slate-200">{val}</span>
-                  )}
+                  <div className="ml-4">
+                    {editingRegime && editedRegime ? (
+                      kind === "boolean" ? (
+                        <select value={editedRegime[key] ?? String(val)} onChange={(e) => setEditedRegime({ ...editedRegime, [key]: e.target.value })}
+                          className="bg-slate-800/50 border border-slate-700/50 h-8 text-sm font-mono-data rounded-md px-2 text-slate-200 w-20">
+                          <option value="true">Yes</option><option value="false">No</option>
+                        </select>
+                      ) : (
+                        <Input type="number" step={1} value={editedRegime[key] ?? String(val)}
+                          onChange={(e) => setEditedRegime({ ...editedRegime, [key]: e.target.value })}
+                          className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-20" />
+                      )
+                    ) : kind === "boolean" ? (
+                      <span className={cn("font-mono-data text-sm", val ? "text-green-400" : "text-slate-500")}>{val ? "Yes" : "No"}</span>
+                    ) : (
+                      <span className="font-mono-data text-sm text-slate-200">{val}</span>
+                    )}
+                  </div>
                 </div>
               );
             })}
-            {config.market_regime.regime_adjustments && (
+            {mr.regime_adjustments && (
               <div className="pt-2">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Regime Adjustments</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                  {Object.entries(config.market_regime.regime_adjustments).map(([regime, adj]: [string, any]) => (
+                  {Object.entries(mr.regime_adjustments).map(([regime, adj]: [string, any]) => (
                     <div key={regime} className="glass-card p-2.5">
                       <p className="text-slate-300 font-medium capitalize mb-1">{regime.replace("_", " ")}</p>
                       <p className="text-slate-500">Reserve: {adj.cash_reserve_mult}x</p>
@@ -771,59 +836,116 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Progressive Adds */}
-      {config?.allocation?.progressive_adds && (
+      {config?.allocation?.progressive_adds && (() => {
+        const pa = config.allocation.progressive_adds;
+        const sizing = pa.sizing || {};
+        const limits = pa.portfolio_limits || {};
+        const progFields = [
+          { key: "enabled", label: "Enabled", kind: "boolean" as const },
+          { key: "min_hold_days", label: "Min Hold Days", kind: "number" as const },
+          { key: "min_days_between_adds", label: "Min Days Between Adds", kind: "number" as const },
+          { key: "require_score_improvement", label: "Score Improvement Needed", kind: "number" as const },
+          { key: "require_rs_gte", label: "RS Required (>=)", kind: "number" as const },
+          { key: "sizing.starter_target", label: "Starter Target %", kind: "float" as const, val: sizing.starter_target },
+          { key: "sizing.add1_target", label: "Add #1 Target %", kind: "float" as const, val: sizing.add1_target },
+          { key: "sizing.add2_target", label: "Add #2 Target %", kind: "float" as const, val: sizing.add2_target },
+          { key: "sizing.max_watchlist_position", label: "Max WL Position %", kind: "float" as const, val: sizing.max_watchlist_position },
+          { key: "sizing.full_position_cap", label: "Full Position Cap %", kind: "float" as const, val: sizing.full_position_cap },
+          { key: "limits.max_watchlist_exposure", label: "Max WL Exposure %", kind: "float" as const, val: limits.max_watchlist_exposure },
+          { key: "limits.max_watchlist_adds_per_cycle", label: "Max Adds/Cycle", kind: "number" as const, val: limits.max_watchlist_adds_per_cycle },
+        ];
+        return (
         <div className="glass-card p-6">
-          <div className="mb-4">
-            <h2 className="text-sm font-semibold text-slate-300">Progressive Position Sizing</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Scale into working WATCHLIST positions</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-300">Progressive Position Sizing</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Scale into working WATCHLIST positions</p>
+            </div>
+            {!editingProgressive ? (
+              <Button variant="outline" size="sm" onClick={() => {
+                const vals: Record<string, string> = {};
+                progFields.forEach(f => {
+                  const v = f.val !== undefined ? f.val : pa[f.key];
+                  vals[f.key] = String(v ?? "");
+                });
+                setEditedProgressive(vals);
+                setEditingProgressive(true);
+              }} className="border-slate-700 text-xs">Edit</Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => { handleSaveConfig(); setEditingProgressive(false); }}
+                  disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => { setEditedProgressive(null); setEditingProgressive(false); }}
+                  className="border-slate-700 text-xs">Cancel</Button>
+              </div>
+            )}
           </div>
-          {(() => {
-            const pa = config.allocation.progressive_adds;
-            const sizing = pa.sizing || {};
-            const limits = pa.portfolio_limits || {};
-            return (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Enabled</span><span className={cn("font-mono-data", pa.enabled ? "text-green-400" : "text-slate-500")}>{pa.enabled ? "Yes" : "No"}</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Min hold days</span><span className="font-mono-data text-slate-300">{pa.min_hold_days}</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Min days between adds</span><span className="font-mono-data text-slate-300">{pa.min_days_between_adds}</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Score improvement needed</span><span className="font-mono-data text-slate-300">+{pa.require_score_improvement}</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">RS required</span><span className="font-mono-data text-slate-300">{">="}{pa.require_rs_gte}</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Max WL exposure</span><span className="font-mono-data text-slate-300">{(limits.max_watchlist_exposure * 100).toFixed(0)}%</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Max adds/cycle</span><span className="font-mono-data text-slate-300">{limits.max_watchlist_adds_per_cycle}</span></div>
-                </div>
-                <div className="pt-2">
-                  <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Size Ladder</p>
-                  <div className="flex gap-2 text-xs">
-                    <div className="glass-card p-2 flex-1 text-center">
-                      <p className="text-slate-400">Starter</p>
-                      <p className="font-mono-data text-slate-200 font-medium">{(sizing.starter_target * 100).toFixed(0)}%</p>
-                    </div>
-                    <div className="text-slate-600 flex items-center">→</div>
-                    <div className="glass-card p-2 flex-1 text-center">
-                      <p className="text-slate-400">Add #1</p>
-                      <p className="font-mono-data text-slate-200 font-medium">{(sizing.add1_target * 100).toFixed(0)}%</p>
-                    </div>
-                    <div className="text-slate-600 flex items-center">→</div>
-                    <div className="glass-card p-2 flex-1 text-center">
-                      <p className="text-slate-400">Add #2</p>
-                      <p className="font-mono-data text-slate-200 font-medium">{((sizing.add2_target || 0.067) * 100).toFixed(1)}%</p>
-                    </div>
-                    <div className="text-slate-600 flex items-center">→</div>
-                    <div className="glass-card p-2 flex-1 text-center">
-                      <p className="text-green-400">Full (BUY)</p>
-                      <p className="font-mono-data text-green-400 font-medium">{(sizing.full_position_cap * 100).toFixed(0)}%</p>
-                    </div>
+          <div className="space-y-2">
+            {progFields.map(({ key, label, kind, val: defaultVal }) => {
+              const val = defaultVal !== undefined ? defaultVal : pa[key];
+              return (
+                <div key={key} className="flex items-center justify-between py-1.5 border-b border-slate-700/30">
+                  <p className="text-xs text-slate-300">{label}</p>
+                  <div className="ml-4">
+                    {editingProgressive && editedProgressive ? (
+                      kind === "boolean" ? (
+                        <select value={editedProgressive[key] ?? String(val)} onChange={(e) => setEditedProgressive({ ...editedProgressive, [key]: e.target.value })}
+                          className="bg-slate-800/50 border border-slate-700/50 h-7 text-xs font-mono-data rounded-md px-2 text-slate-200 w-20">
+                          <option value="true">Yes</option><option value="false">No</option>
+                        </select>
+                      ) : (
+                        <Input type="number" step={kind === "float" ? 0.01 : 1}
+                          value={editedProgressive[key] ?? String(val)}
+                          onChange={(e) => setEditedProgressive({ ...editedProgressive, [key]: e.target.value })}
+                          className="bg-slate-800/50 border-slate-700/50 h-7 text-xs font-mono-data w-20" />
+                      )
+                    ) : kind === "boolean" ? (
+                      <span className={cn("font-mono-data text-xs", val ? "text-green-400" : "text-slate-500")}>{val ? "Yes" : "No"}</span>
+                    ) : kind === "float" ? (
+                      <span className="font-mono-data text-xs text-slate-200">{((val || 0) * 100).toFixed(1)}%</span>
+                    ) : (
+                      <span className="font-mono-data text-xs text-slate-200">{val}</span>
+                    )}
                   </div>
                 </div>
+              );
+            })}
+          </div>
+          {!editingProgressive && (
+            <div className="pt-3">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Size Ladder</p>
+              <div className="flex gap-2 text-xs">
+                <div className="glass-card p-2 flex-1 text-center">
+                  <p className="text-slate-400">Starter</p>
+                  <p className="font-mono-data text-slate-200 font-medium">{((sizing.starter_target || 0) * 100).toFixed(0)}%</p>
+                </div>
+                <div className="text-slate-600 flex items-center">→</div>
+                <div className="glass-card p-2 flex-1 text-center">
+                  <p className="text-slate-400">Add #1</p>
+                  <p className="font-mono-data text-slate-200 font-medium">{((sizing.add1_target || 0) * 100).toFixed(0)}%</p>
+                </div>
+                <div className="text-slate-600 flex items-center">→</div>
+                <div className="glass-card p-2 flex-1 text-center">
+                  <p className="text-slate-400">Add #2</p>
+                  <p className="font-mono-data text-slate-200 font-medium">{((sizing.add2_target || 0.067) * 100).toFixed(1)}%</p>
+                </div>
+                <div className="text-slate-600 flex items-center">→</div>
+                <div className="glass-card p-2 flex-1 text-center">
+                  <p className="text-green-400">Full (BUY)</p>
+                  <p className="font-mono-data text-green-400 font-medium">{((sizing.full_position_cap || 0) * 100).toFixed(0)}%</p>
+                </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Backtesting */}
       <div className="glass-card p-6">
