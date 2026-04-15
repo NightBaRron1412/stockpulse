@@ -533,37 +533,49 @@ def suggest_allocation(data: dict):
         candidates = [r for r in all_recs if r.get("action") in ("BUY", "WATCHLIST")]
     candidates.sort(key=lambda r: r.get("composite_score", 0), reverse=True)
 
+    alloc_cfg = strat.get("allocation", {})
+    starter_enabled = alloc_cfg.get("watchlist_starter_enabled", True)
+    starter_min_score = alloc_cfg.get("watchlist_starter_min_score", 30)
+    starter_size_ratio = alloc_cfg.get("watchlist_starter_size", 0.33)
+    max_wl_sleeve_pct = alloc_cfg.get("max_watchlist_sleeve", 0.25)
+    max_wl_names = alloc_cfg.get("max_watchlist_names", 3)
+
     allocations = []
     remaining = amount
     held_tickers = {p["ticker"] for p in positions}
     max_positions = risk_cfg.get("max_positions", 8)
+    max_pct = risk_cfg.get("max_position_pct", 8)
     current_count = len(positions)
 
-    for rec in candidates[:15]:
+    # Separate BUY and eligible WATCHLIST candidates
+    buy_candidates = [r for r in candidates if r.get("action") == "BUY"]
+    wl_candidates = [
+        r for r in candidates
+        if r.get("action") == "WATCHLIST" and r.get("composite_score", 0) >= starter_min_score
+    ]
+
+    # --- BUY candidates: full position sizing ---
+    for rec in buy_candidates[:15]:
         if remaining <= 0 or current_count >= max_positions:
             break
 
         ticker = rec["ticker"]
         score = rec.get("composite_score", 0)
-        action = rec.get("action", "HOLD")
 
         risk_check = check_concentration_limits(ticker, positions, total_portfolio)
-
         if not risk_check["allowed"] and ticker not in held_tickers:
             continue
 
-        max_pct = risk_cfg.get("max_position_pct", 8)
-        max_dollars = total_portfolio * (max_pct / 100)
         score_factor = min(abs(score) / 55, 1.0)
-        suggested_dollars = min(max_dollars * score_factor * risk_check.get("size_multiplier", 1.0), remaining)
-        suggested_dollars = round(suggested_dollars, 2)
+        full_dollars = total_portfolio * (max_pct / 100) * score_factor * risk_check.get("size_multiplier", 1.0)
+        suggested_dollars = round(min(full_dollars, remaining), 2)
 
         if suggested_dollars < 50:
             continue
 
         allocations.append({
             "ticker": ticker,
-            "action": action,
+            "action": rec.get("action", "BUY"),
             "score": round(score, 1),
             "suggested_amount": suggested_dollars,
             "suggested_pct": round((suggested_dollars / amount) * 100, 1),
@@ -572,11 +584,101 @@ def suggest_allocation(data: dict):
             "cluster": risk_check.get("cluster_tickers", []),
             "already_held": ticker in held_tickers,
             "risk_flags": risk_check.get("reasons", []),
+            "position_type": "full",
+            "size_reason": "BUY — full position",
         })
 
         remaining -= suggested_dollars
         if ticker not in held_tickers:
             current_count += 1
+
+    # --- WATCHLIST starters: 33% size, strict qualifiers, capped sleeve ---
+    max_wl_dollars = amount * max_wl_sleeve_pct
+    wl_allocated = 0.0
+    wl_count = 0
+    wl_clusters_used: set = set()
+
+    if starter_enabled:
+        for rec in wl_candidates[:15]:
+            if remaining <= 0 or wl_count >= max_wl_names or wl_allocated >= max_wl_dollars:
+                break
+
+            ticker = rec["ticker"]
+            score = rec.get("composite_score", 0)
+
+            # Requirement 1: trend bucket must confirm
+            confirmation = rec.get("confirmation", {})
+            trend_confirms = confirmation.get("buckets", {}).get("trend", {}).get("confirms", False)
+            if not trend_confirms:
+                continue
+
+            # Requirement 2: relative strength score >= 60
+            rs_score = rec.get("signals", {}).get("relative_strength", {}).get("score", 0)
+            if rs_score < 60:
+                continue
+
+            # Requirement 3: no earnings blackout (earnings score != -30)
+            earnings_score = rec.get("signals", {}).get("earnings", {}).get("score", 0)
+            if earnings_score <= -30:
+                continue
+
+            # Requirement 4: concentration limits must pass
+            risk_check = check_concentration_limits(ticker, positions, total_portfolio)
+            if not risk_check["allowed"] and ticker not in held_tickers:
+                continue
+
+            # Requirement 5: max 1 per cluster
+            cluster_tickers = risk_check.get("cluster_tickers", [])
+            cluster_key = frozenset(cluster_tickers + [ticker])
+            if any(c in wl_clusters_used for c in cluster_key):
+                continue
+
+            # Requirement 6: price above 20 EMA — check signals or thesis
+            signals = rec.get("signals", {})
+            ma_signals = signals.get("moving_averages", {})
+            price_above_20ema = ma_signals.get("price_above_20ema", None)
+            if price_above_20ema is None:
+                # Fallback: check thesis text for explicit invalidation cue
+                thesis_text = rec.get("thesis", "").lower()
+                price_above_20ema = "below 20" not in thesis_text and "under 20 ema" not in thesis_text
+            if not price_above_20ema:
+                continue
+
+            # Requirement 7: not invalidated
+            if rec.get("invalidated", False):
+                continue
+
+            # Starter sizing: 33% of what a full BUY would get
+            score_factor = min(abs(score) / 55, 1.0)
+            full_dollars = total_portfolio * (max_pct / 100) * score_factor * risk_check.get("size_multiplier", 1.0)
+            starter_dollars = round(
+                min(full_dollars * starter_size_ratio, remaining, max_wl_dollars - wl_allocated), 2
+            )
+
+            if starter_dollars < 50:
+                continue
+
+            allocations.append({
+                "ticker": ticker,
+                "action": rec.get("action", "WATCHLIST"),
+                "score": round(score, 1),
+                "suggested_amount": starter_dollars,
+                "suggested_pct": round((starter_dollars / amount) * 100, 1),
+                "thesis": rec.get("thesis", ""),
+                "sector": risk_check.get("sector", ""),
+                "cluster": cluster_tickers,
+                "already_held": ticker in held_tickers,
+                "risk_flags": risk_check.get("reasons", []),
+                "position_type": "starter",
+                "size_reason": f"WATCHLIST starter (33% of full, score {score:.1f})",
+            })
+
+            remaining -= starter_dollars
+            wl_allocated += starter_dollars
+            wl_count += 1
+            wl_clusters_used.update(cluster_key)
+            if ticker not in held_tickers:
+                current_count += 1
 
     cash_reserve = max(remaining, 0)
 

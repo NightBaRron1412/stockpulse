@@ -105,3 +105,24 @@ backtesting:
   max_positions: 8
   position_size: "volatility_adjusted"
   initial_cash: 100000
+
+allocation:
+  full_position_only_on: BUY
+  watchlist_starter_enabled: true
+  watchlist_starter_min_score: 30
+  watchlist_starter_requires:
+    - trend_bucket_confirm
+    - relative_strength_raw_gte_60
+    - no_earnings_blackout
+    - no_sector_or_cluster_cap_breach
+    - price_above_20ema
+    - not_invalidated
+  watchlist_starter_size: 0.33
+  watchlist_starter_risk: 0.25
+  max_watchlist_sleeve: 0.25
+  max_watchlist_names: 3
+  max_one_name_per_cluster: true
+  add_to_full_only_on_buy_upgrade: true
+  never_average_down_watchlist: true
+  watchlist_exit_score: 20
+  watchlist_timeout_days: 5

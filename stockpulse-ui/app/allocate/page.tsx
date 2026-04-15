@@ -192,6 +192,7 @@ export default function AllocatePage() {
                   <TableRow className="border-slate-700/50 hover:bg-transparent">
                     <TableHead className="text-slate-400 text-xs">Ticker</TableHead>
                     <TableHead className="text-slate-400 text-xs">Action</TableHead>
+                    <TableHead className="text-slate-400 text-xs">Type</TableHead>
                     <TableHead className="text-slate-400 text-xs text-right">Score</TableHead>
                     <TableHead className="text-slate-400 text-xs text-right">Amount</TableHead>
                     <TableHead className="text-slate-400 text-xs text-right">% of Total</TableHead>
@@ -213,6 +214,19 @@ export default function AllocatePage() {
                         <span className={cn("px-2 py-0.5 rounded text-[11px] font-medium", actionBadgeClass(alloc.action))}>
                           {alloc.action}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {alloc.position_type === "starter" ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                            Starter 33%
+                          </span>
+                        ) : alloc.position_type === "full" ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-green-500/15 text-green-400 border border-green-500/25">
+                            Full
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-600">—</span>
+                        )}
                       </TableCell>
                       <TableCell className={cn(
                         "font-mono-data text-right text-xs",
