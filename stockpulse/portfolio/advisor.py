@@ -396,11 +396,14 @@ def _evaluate_deployment(ctx: dict, rec_map: dict, state: dict, config: dict,
     if ctx["drawdown"].get("new_buys_paused", False):
         return suggestions
 
+    from stockpulse.portfolio.allocation import get_size_limits
+
     risk_cfg = load_strategies().get("risk", {})
+    limits = get_size_limits(ctx["total"], risk_cfg)
     cash_min_pct = config.get("cash_reserve_min", 0.12)
     cash_min = cash_min_pct * ctx["total"]
     deployable = ctx["cash_available"] + freed_cash - cash_min
-    max_positions = risk_cfg.get("max_positions", 8)
+    max_positions = limits["max_positions"]
 
     buy_candidates = []
     for ticker, rec in rec_map.items():
@@ -420,8 +423,20 @@ def _evaluate_deployment(ctx: dict, rec_map: dict, state: dict, config: dict,
             continue
 
         if deployable > 50:
+            # Weekly trend filter: reduce size if weekly trend is down
+            weekly_mult = 1.0
+            try:
+                from stockpulse.signals.weekly import assess_weekly_trend
+                from stockpulse.data.provider import get_price_history as _gph
+                wk_df = _gph(ticker, period="1y")
+                if not wk_df.empty:
+                    weekly = assess_weekly_trend(wk_df)
+                    weekly_mult = weekly.get("size_multiplier", 1.0)
+            except Exception:
+                pass
+
             full_dollars = compute_buy_size(ctx["total"], score, risk_cfg,
-                                            size_mult * risk_check.get("size_multiplier", 1.0))
+                                            size_mult * risk_check.get("size_multiplier", 1.0) * weekly_mult)
             amount = min(full_dollars, deployable)
             if amount < 50:
                 continue

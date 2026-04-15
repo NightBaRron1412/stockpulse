@@ -106,6 +106,16 @@ risk:
   drawdown_half: 8
   drawdown_pause: 12
   earnings_blackout_days: 3
+  portfolio_size_tiers:
+    under_15k:
+      max_position_pct: 12
+      max_positions: 5
+    15k_to_50k:
+      max_position_pct: 10
+      max_positions: 7
+    over_50k:
+      max_position_pct: 8
+      max_positions: 8
 scheduling:
   morning_scan: 09:35
   intraday_interval_minutes: 30

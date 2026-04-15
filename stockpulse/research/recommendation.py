@@ -94,9 +94,18 @@ def generate_recommendation(ticker: str, df: pd.DataFrame, use_llm: bool = True)
     # Check confirmation buckets
     confirmation = check_confirmation_buckets(signals)
 
-    # Downgrade BUY to WATCHLIST if not enough buckets confirm
-    if action == "BUY" and not confirmation["passes"]:
-        action = "WATCHLIST"
+    # BUY confirmation: requires Trend + (Participation or Catalyst)
+    # Trend alone is not enough — need breadth or catalyst backing
+    buckets = confirmation.get("buckets", {})
+    trend_confirms = buckets.get("trend", {}).get("confirms", False)
+    participation_confirms = buckets.get("participation", {}).get("confirms", False)
+    catalyst_confirms = buckets.get("catalyst", {}).get("confirms", False)
+
+    if action == "BUY":
+        if not trend_confirms:
+            action = "WATCHLIST"  # No trend = no BUY
+        elif not (participation_confirms or catalyst_confirms):
+            action = "WATCHLIST"  # Trend alone not enough
 
     # ---- Score acceleration modifier (uses raw composite, before PEAD overlay) ----
     accel_bonus = compute_score_acceleration(ticker, composite, confirmation)

@@ -180,8 +180,9 @@ def compute_score_acceleration(
     persist = sum(1 for h in ticker_hist[-3:] if h["score"] >= 35)
 
     accel_bonus = 0.0
-    if score_t >= 35 and breadth >= 2 and persist >= 2:
-        accel_bonus = min(0.25 * vel1 + 0.15 * vel3, 8.0)
+    # Only activate when base score >= 25 and at least 2 buckets improved
+    if score_t >= 25 and breadth >= 2 and persist >= 2:
+        accel_bonus = min(0.25 * vel1 + 0.15 * vel3, 5.0)  # capped at +5
         accel_bonus = max(accel_bonus, 0.0)  # no negative bonus
 
     return accel_bonus

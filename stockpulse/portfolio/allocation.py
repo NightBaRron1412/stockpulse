@@ -9,6 +9,28 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_size_limits(portfolio_value: float, risk_cfg: dict) -> dict:
+    """Get position size limits adjusted for portfolio size.
+
+    Small portfolios (<$15k) get higher per-position caps and fewer max positions
+    to avoid spreading capital too thin.
+    """
+    tiers = risk_cfg.get("portfolio_size_tiers", {})
+    if portfolio_value < 15000 and "under_15k" in tiers:
+        tier = tiers["under_15k"]
+    elif portfolio_value < 50000 and "15k_to_50k" in tiers:
+        tier = tiers["15k_to_50k"]
+    elif "over_50k" in tiers:
+        tier = tiers["over_50k"]
+    else:
+        tier = {}
+
+    return {
+        "max_position_pct": tier.get("max_position_pct", risk_cfg.get("max_position_pct", 8)),
+        "max_positions": tier.get("max_positions", risk_cfg.get("max_positions", 8)),
+    }
+
+
 def check_buy_eligible(rec: dict, positions: list[dict], portfolio_value: float,
                        held_tickers: set, max_positions: int) -> dict | None:
     """Check if a BUY candidate passes all rules. Returns risk_check or None."""
@@ -93,8 +115,12 @@ def check_watchlist_starter_eligible(rec: dict, positions: list[dict],
 
 def compute_buy_size(portfolio_value: float, score: float, risk_cfg: dict,
                      size_multiplier: float = 1.0) -> float:
-    """Compute full BUY position size in dollars."""
-    max_pct = risk_cfg.get("max_position_pct", 8) / 100.0
+    """Compute full BUY position size in dollars.
+
+    Uses portfolio size tiers: <$15k gets 12% cap, $15-50k gets 10%, >$50k gets 8%.
+    """
+    limits = get_size_limits(portfolio_value, risk_cfg)
+    max_pct = limits["max_position_pct"] / 100.0
     score_factor = min(abs(score) / 55, 1.0)
     return portfolio_value * max_pct * score_factor * size_multiplier
 
