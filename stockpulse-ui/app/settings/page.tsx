@@ -48,7 +48,32 @@ const FLOAT_KEYS = new Set([
 
 type InputKind = "boolean" | "integer" | "float" | "text";
 
-function getInputType(key: string, value: unknown): { kind: InputKind; step?: number } {
+const FIELD_RANGES: Record<string, { min?: number; max?: number }> = {
+  watchlist_starter_size: { min: 0.01, max: 1.0 },
+  watchlist_starter_risk: { min: 0.01, max: 5.0 },
+  max_watchlist_sleeve: { min: 0.01, max: 1.0 },
+  max_position_pct: { min: 1, max: 25 },
+  max_sector_pct: { min: 5, max: 50 },
+  risk_per_trade_pct: { min: 0.1, max: 5.0 },
+  max_positions: { min: 1, max: 20 },
+  max_watchlist_names: { min: 1, max: 10 },
+  drawdown_half: { min: 1, max: 30 },
+  drawdown_pause: { min: 5, max: 50 },
+  earnings_blackout_days: { min: 0, max: 10 },
+  watchlist_exit_score: { min: -100, max: 100 },
+  watchlist_timeout_days: { min: 1, max: 30 },
+  buy: { min: 10, max: 100 },
+  sell: { min: -100, max: -10 },
+  watchlist: { min: 10, max: 100 },
+  watchlist_relaxed: { min: 5, max: 100 },
+  caution: { min: -100, max: 0 },
+  exit: { min: -50, max: 50 },
+  confidence_min: { min: 0, max: 100 },
+  watchlist_starter_min_score: { min: 10, max: 55 },
+};
+
+function getInputType(key: string, value: unknown): { kind: InputKind; step?: number; min?: number; max?: number } {
+  const range = FIELD_RANGES[key];
   if (
     typeof value === "boolean" ||
     BOOLEAN_KEYS.has(key) ||
@@ -60,13 +85,15 @@ function getInputType(key: string, value: unknown): { kind: InputKind; step?: nu
     return { kind: "boolean" };
   }
   if (INTEGER_KEYS.has(key)) {
-    return { kind: "integer", step: 1 };
+    return { kind: "integer", step: 1, min: range?.min, max: range?.max };
   }
   if (FLOAT_KEYS.has(key)) {
-    return { kind: "float", step: 0.01 };
+    return { kind: "float", step: 0.01, min: range?.min, max: range?.max };
   }
   if (typeof value === "number") {
-    return Number.isInteger(value) ? { kind: "integer", step: 1 } : { kind: "float", step: 0.01 };
+    return Number.isInteger(value)
+      ? { kind: "integer", step: 1, min: range?.min, max: range?.max }
+      : { kind: "float", step: 0.01, min: range?.min, max: range?.max };
   }
   return { kind: "text" };
 }
@@ -77,7 +104,7 @@ function renderEditableField(
   originalValue: unknown,
   onChange: (key: string, val: string) => void
 ) {
-  const { kind, step } = getInputType(key, originalValue);
+  const { kind, step, min, max } = getInputType(key, originalValue);
 
   if (kind === "boolean") {
     return (
@@ -96,6 +123,8 @@ function renderEditableField(
     <Input
       type="number"
       step={step}
+      min={min}
+      max={max}
       value={val}
       onChange={(e) => onChange(key, e.target.value)}
       className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24"
@@ -203,7 +232,7 @@ export default function SettingsPage() {
       setEditedAllocation(null);
       refresh();
     } finally { setSaving(false); }
-  }, [editedThresholds, editedRisk, refresh]);
+  }, [editedThresholds, editedRisk, editedSchedule, editedAllocation, refresh]);
 
   if (loading) {
     return (
@@ -423,7 +452,7 @@ export default function SettingsPage() {
               { key: "watchlist_starter_enabled", label: "Starter Enabled", desc: "Allow WATCHLIST starter positions" },
               { key: "watchlist_starter_min_score", label: "Min Score", desc: "Minimum composite score for starter eligibility" },
               { key: "watchlist_starter_size", label: "Starter Size", desc: "Fraction of full BUY size (0.33 = 33%)" },
-              { key: "watchlist_starter_risk", label: "Starter Risk %", desc: "Risk per trade for starters (vs 0.75% for BUY)" },
+              { key: "watchlist_starter_risk", label: "Starter Risk %", desc: "Risk % of portfolio per starter trade (0.25 = 0.25%, vs 0.75% for BUY). Range: 0.01-5.0" },
               { key: "max_watchlist_sleeve", label: "Max Sleeve", desc: "Max fraction of capital for WATCHLIST starters" },
               { key: "max_watchlist_names", label: "Max Names", desc: "Maximum WATCHLIST starter positions" },
               { key: "watchlist_exit_score", label: "Exit Score", desc: "Exit starter if score drops below this" },
