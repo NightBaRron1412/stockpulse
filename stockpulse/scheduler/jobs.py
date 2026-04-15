@@ -88,6 +88,10 @@ def intraday_check_job():
                         len(changes), len(tier_changes), len(score_moves), len(approaching))
         else:
             logger.info("Intraday: no changes detected")
+
+        # Always generate a status report (even when no changes)
+        _generate_intraday_status(recommendations, changes)
+
         _run_advisor("intraday", recommendations)
     except Exception:
         logger.exception("Intraday check failed")
@@ -195,6 +199,72 @@ def _send_validation_report(n_buy: int, validation: dict):
         "catalyst_summary": "",
         "invalidation": "",
     })
+
+
+def _generate_intraday_status(recommendations: list[dict], changes: list[dict]) -> None:
+    """Generate a brief intraday status report — always, even with no changes."""
+    from datetime import datetime
+    from pathlib import Path
+    from stockpulse.config.settings import get_config
+
+    try:
+        cfg = get_config()
+        reports_dir = Path(cfg["outputs_dir"]) / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        report_path = reports_dir / f"{timestamp}-intraday.md"
+
+        # Top movers by score
+        sorted_recs = sorted(recommendations, key=lambda r: r.get("composite_score", 0), reverse=True)
+        top = sorted_recs[:5]
+        bottom = sorted(recommendations, key=lambda r: r.get("composite_score", 0))[:3]
+
+        # Count by action
+        counts = {}
+        for r in recommendations:
+            a = r.get("action", "HOLD")
+            counts[a] = counts.get(a, 0) + 1
+
+        lines = [
+            f"# Intraday Status — {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "",
+            f"**{len(recommendations)} tickers scanned** | "
+            + " | ".join(f"{a}: {c}" for a, c in sorted(counts.items())),
+            "",
+        ]
+
+        if changes:
+            tier_changes = [c for c in changes if c.get("type") == "action_change"]
+            score_moves = [c for c in changes if c.get("type") == "score_movement"]
+            approaching = [c for c in changes if c.get("type") == "approaching_threshold"]
+            lines.append(f"## Changes: {len(tier_changes)} tier, {len(score_moves)} score, {len(approaching)} approaching")
+            lines.append("")
+            for c in changes:
+                lines.append(f"- **{c['ticker']}**: {c.get('thesis', '')[:100]}")
+            lines.append("")
+        else:
+            lines.append("**No signal changes**")
+            lines.append("")
+
+        lines.append("## Top Movers")
+        lines.append("")
+        for r in top:
+            lines.append(f"- **{r['ticker']}** {r['action']} ({r['composite_score']:+.1f})")
+        lines.append("")
+
+        if bottom and bottom[0].get("composite_score", 0) < 0:
+            lines.append("## Weakest")
+            lines.append("")
+            for r in bottom:
+                if r.get("composite_score", 0) < 0:
+                    lines.append(f"- **{r['ticker']}** {r['action']} ({r['composite_score']:+.1f})")
+            lines.append("")
+
+        lines.append("---")
+        report_path.write_text("\n".join(lines))
+        logger.info("Intraday status report: %s", report_path)
+    except Exception:
+        logger.debug("Failed to generate intraday status report")
 
 
 def _run_advisor(scan_trigger: str, recommendations: list[dict] | None = None):
