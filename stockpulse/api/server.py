@@ -572,6 +572,14 @@ def analyze_ticker(ticker: str):
         raise HTTPException(404, f"No data for {ticker}")
     result = generate_recommendation(t, df)
 
+    # Add current price
+    try:
+        from stockpulse.data.provider import get_current_quote
+        quote = get_current_quote(t)
+        result["current_price"] = quote.get("price", 0)
+    except Exception:
+        pass
+
     # Save result into latest scan JSON so watchlist shows it
     try:
         json_dir = PROJECT_ROOT / "outputs" / "json"
