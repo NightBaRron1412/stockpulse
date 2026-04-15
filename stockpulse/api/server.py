@@ -195,7 +195,7 @@ def _get_scan_status() -> dict:
         "running": running,
         "progress": progress if running else current_job,
         "last_completed": last_completed,
-        "next_scheduled": "09:35 ET",
+        "next_scheduled": f"{load_strategies().get('scheduling', {}).get('morning_scan', '09:35')} {load_strategies().get('scheduling', {}).get('timezone', 'ET')}",
     }
 
 
@@ -860,6 +860,8 @@ def get_config_endpoint():
         "allocation": strat.get("allocation", {}),
         "filters": strat.get("filters", {}),
         "portfolio_advisor": strat.get("portfolio_advisor", {}),
+        "market_regime": strat.get("market_regime", {}),
+        "backtesting": strat.get("backtesting", {}),
     }
 
 
@@ -1115,12 +1117,26 @@ def update_config(data: dict):
             strat["portfolio_advisor"] = {}
         pa = strat["portfolio_advisor"]
         for key, val in data["portfolio_advisor"].items():
-            # Handle nested dicts (suggest_trim_on_caution, suggest_swap_to_fund_buy, turnover)
             if isinstance(val, dict) and isinstance(pa.get(key), dict):
                 for subkey, subval in val.items():
                     pa[key][subkey] = subval
             else:
                 pa[key] = val
+    if "market_regime" in data:
+        if "market_regime" not in strat:
+            strat["market_regime"] = {}
+        mr = strat["market_regime"]
+        for key, val in data["market_regime"].items():
+            if isinstance(val, dict) and isinstance(mr.get(key), dict):
+                for subkey, subval in val.items():
+                    mr[key][subkey] = subval
+            else:
+                mr[key] = val
+    if "backtesting" in data:
+        if "backtesting" not in strat:
+            strat["backtesting"] = {}
+        for key, val in data["backtesting"].items():
+            strat["backtesting"][key] = val
     # Write back
     strat_path = PROJECT_ROOT / "stockpulse" / "config" / "strategies.yaml"
     with open(strat_path, "w") as f:

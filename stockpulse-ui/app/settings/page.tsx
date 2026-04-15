@@ -728,6 +728,103 @@ export default function SettingsPage() {
         );
       })()}
 
+      {/* Market Regime */}
+      {config?.market_regime && Object.keys(config.market_regime).length > 0 && (
+        <div className="glass-card p-6">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-slate-300">Market Regime</h2>
+            <p className="text-xs text-slate-500 mt-0.5">SPY trend + VIX + market breadth regime detection</p>
+          </div>
+          <div className="space-y-2">
+            {[
+              { key: "enabled", label: "Enabled", kind: "boolean" as const },
+              { key: "vix_high", label: "VIX High Threshold", kind: "number" as const },
+              { key: "vix_extreme", label: "VIX Extreme Threshold", kind: "number" as const },
+              { key: "correction_threshold_pct", label: "Correction Threshold %", kind: "number" as const },
+            ].map(({ key, label, kind }) => {
+              const val = config.market_regime[key];
+              return (
+                <div key={key} className="flex items-center justify-between py-1.5 border-b border-slate-700/30">
+                  <p className="text-sm text-slate-300">{label}</p>
+                  {kind === "boolean" ? (
+                    <span className={cn("font-mono-data text-sm", val ? "text-green-400" : "text-slate-500")}>{val ? "Yes" : "No"}</span>
+                  ) : (
+                    <span className="font-mono-data text-sm text-slate-200">{val}</span>
+                  )}
+                </div>
+              );
+            })}
+            {config.market_regime.regime_adjustments && (
+              <div className="pt-2">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Regime Adjustments</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  {Object.entries(config.market_regime.regime_adjustments).map(([regime, adj]: [string, any]) => (
+                    <div key={regime} className="glass-card p-2.5">
+                      <p className="text-slate-300 font-medium capitalize mb-1">{regime.replace("_", " ")}</p>
+                      <p className="text-slate-500">Reserve: {adj.cash_reserve_mult}x</p>
+                      <p className="text-slate-500">BUY adj: +{adj.buy_threshold_add}</p>
+                      <p className="text-slate-500">Starters: {adj.starter_enabled ? "Yes" : "No"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Progressive Adds */}
+      {config?.allocation?.progressive_adds && (
+        <div className="glass-card p-6">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-slate-300">Progressive Position Sizing</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Scale into working WATCHLIST positions</p>
+          </div>
+          {(() => {
+            const pa = config.allocation.progressive_adds;
+            const sizing = pa.sizing || {};
+            const limits = pa.portfolio_limits || {};
+            return (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Enabled</span><span className={cn("font-mono-data", pa.enabled ? "text-green-400" : "text-slate-500")}>{pa.enabled ? "Yes" : "No"}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Min hold days</span><span className="font-mono-data text-slate-300">{pa.min_hold_days}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Min days between adds</span><span className="font-mono-data text-slate-300">{pa.min_days_between_adds}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Score improvement needed</span><span className="font-mono-data text-slate-300">+{pa.require_score_improvement}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">RS required</span><span className="font-mono-data text-slate-300">{">="}{pa.require_rs_gte}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Max WL exposure</span><span className="font-mono-data text-slate-300">{(limits.max_watchlist_exposure * 100).toFixed(0)}%</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Max adds/cycle</span><span className="font-mono-data text-slate-300">{limits.max_watchlist_adds_per_cycle}</span></div>
+                </div>
+                <div className="pt-2">
+                  <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Size Ladder</p>
+                  <div className="flex gap-2 text-xs">
+                    <div className="glass-card p-2 flex-1 text-center">
+                      <p className="text-slate-400">Starter</p>
+                      <p className="font-mono-data text-slate-200 font-medium">{(sizing.starter_target * 100).toFixed(0)}%</p>
+                    </div>
+                    <div className="text-slate-600 flex items-center">→</div>
+                    <div className="glass-card p-2 flex-1 text-center">
+                      <p className="text-slate-400">Add #1</p>
+                      <p className="font-mono-data text-slate-200 font-medium">{(sizing.add1_target * 100).toFixed(0)}%</p>
+                    </div>
+                    <div className="text-slate-600 flex items-center">→</div>
+                    <div className="glass-card p-2 flex-1 text-center">
+                      <p className="text-slate-400">Add #2</p>
+                      <p className="font-mono-data text-slate-200 font-medium">{((sizing.add2_target || 0.067) * 100).toFixed(1)}%</p>
+                    </div>
+                    <div className="text-slate-600 flex items-center">→</div>
+                    <div className="glass-card p-2 flex-1 text-center">
+                      <p className="text-green-400">Full (BUY)</p>
+                      <p className="font-mono-data text-green-400 font-medium">{(sizing.full_position_cap * 100).toFixed(0)}%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Backtesting */}
       <div className="glass-card p-6">
         <h2 className="text-sm font-semibold text-slate-300 mb-4">Backtesting</h2>
