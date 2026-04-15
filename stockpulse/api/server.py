@@ -482,6 +482,7 @@ def get_config_endpoint():
         "confirmation": strat.get("confirmation", {}),
         "risk": strat.get("risk", {}),
         "scheduling": strat.get("scheduling", {}),
+        "allocation": strat.get("allocation", {}),
     }
 
 
@@ -753,6 +754,18 @@ def update_config(data: dict):
         for key, val in data["scheduling"].items():
             if key in strat.get("scheduling", {}):
                 strat["scheduling"][key] = val
+    if "allocation" in data:
+        # Only allow editing sizing/limits, not the requirement rules
+        editable_alloc_keys = {
+            "watchlist_starter_enabled", "watchlist_starter_min_score",
+            "watchlist_starter_size", "watchlist_starter_risk",
+            "max_watchlist_sleeve", "max_watchlist_names",
+            "max_one_name_per_cluster", "add_to_full_only_on_buy_upgrade",
+            "never_average_down_watchlist", "watchlist_exit_score", "watchlist_timeout_days",
+        }
+        for key, val in data["allocation"].items():
+            if key in editable_alloc_keys and key in strat.get("allocation", {}):
+                strat["allocation"][key] = val
     # Write back
     strat_path = PROJECT_ROOT / "stockpulse" / "config" / "strategies.yaml"
     with open(strat_path, "w") as f:

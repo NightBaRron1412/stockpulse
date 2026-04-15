@@ -103,6 +103,7 @@ export default function SettingsPage() {
   const thresholds = config?.thresholds ?? {};
   const risk = config?.risk ?? {};
   const scheduling = config?.scheduling ?? {};
+  const allocation = config?.allocation ?? {};
   const maxWeight = Math.max(...Object.values(weights).map((w: any) => Number(w) || 0), 0.01);
 
   const currentThresholds = editedThresholds ?? Object.fromEntries(
@@ -263,6 +264,70 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* Allocation Rules */}
+      {Object.keys(allocation).length > 0 && (
+        <div className="glass-card p-6">
+          <h2 className="text-sm font-semibold text-slate-300 mb-4">Allocation Rules</h2>
+
+          {/* Editable sizing params */}
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Sizing & Limits <span className="text-blue-400 text-[10px] ml-1">Editable</span></h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
+            {[
+              { key: "watchlist_starter_enabled", label: "Starter Enabled", desc: "Allow WATCHLIST starter positions" },
+              { key: "watchlist_starter_min_score", label: "Min Score", desc: "Minimum composite score for starter eligibility" },
+              { key: "watchlist_starter_size", label: "Starter Size", desc: "Fraction of full BUY size (0.33 = 33%)" },
+              { key: "watchlist_starter_risk", label: "Starter Risk %", desc: "Risk per trade for starters (vs 0.75% for BUY)" },
+              { key: "max_watchlist_sleeve", label: "Max Sleeve", desc: "Max fraction of capital for WATCHLIST starters" },
+              { key: "max_watchlist_names", label: "Max Names", desc: "Maximum WATCHLIST starter positions" },
+              { key: "watchlist_exit_score", label: "Exit Score", desc: "Exit starter if score drops below this" },
+              { key: "watchlist_timeout_days", label: "Timeout Days", desc: "Auto-exit starter after this many days" },
+            ].map(({ key, label, desc }) => (
+              <div key={key} className="space-y-1">
+                <p className="cursor-help text-xs text-slate-400" title={desc}>{label}</p>
+                <p className="font-mono-data text-slate-200 text-sm">
+                  {allocation[key] != null ? (typeof allocation[key] === "boolean" ? (allocation[key] ? "Yes" : "No") : String(allocation[key])) : "--"}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <Separator className="my-4 bg-slate-700/50" />
+
+          {/* Read-only requirement rules */}
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Starter Requirements <span className="text-slate-600 text-[10px] ml-1">Read-only</span></h3>
+          <div className="flex flex-wrap gap-2">
+            {(allocation.watchlist_starter_requires ?? []).map((req: string) => (
+              <span key={req} className="px-2 py-1 rounded-md bg-slate-800/40 border border-slate-700/30 text-xs text-slate-300">
+                {req.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
+
+          <Separator className="my-4 bg-slate-700/50" />
+
+          {/* Read-only policy flags */}
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Policy <span className="text-slate-600 text-[10px] ml-1">Read-only</span></h3>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="flex justify-between">
+              <span className="text-slate-400">Full position only on</span>
+              <span className="font-mono-data text-green-400">{allocation.full_position_only_on ?? "BUY"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Max 1 per cluster</span>
+              <span className="font-mono-data text-slate-300">{allocation.max_one_name_per_cluster ? "Yes" : "No"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Upgrade to full on BUY</span>
+              <span className="font-mono-data text-slate-300">{allocation.add_to_full_only_on_buy_upgrade ? "Yes" : "No"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Never average down</span>
+              <span className="font-mono-data text-slate-300">{allocation.never_average_down_watchlist ? "Yes" : "No"}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Scan controls */}
       <div className="glass-card p-6">
