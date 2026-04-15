@@ -82,12 +82,14 @@ export default function ValidationPage() {
             <p className="text-2xl font-bold font-mono-data text-slate-200">{totalSignals}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500 uppercase mb-1">BUY Signals</p>
-            <p className="text-2xl font-bold font-mono-data text-green-400">{buyCount}</p>
+            <p className="text-xs text-slate-500 uppercase mb-1">BUY Tracked</p>
+            <p className="text-2xl font-bold font-mono-data text-green-400">{sampleSize?.total_buy_tracked ?? buyCount}</p>
+            {buyCount > 0 && <p className="text-xs text-slate-600 font-mono-data">{buyCount} resolved</p>}
           </div>
           <div>
-            <p className="text-xs text-slate-500 uppercase mb-1">WATCHLIST Signals</p>
-            <p className="text-2xl font-bold font-mono-data text-blue-400">{watchlistCount}</p>
+            <p className="text-xs text-slate-500 uppercase mb-1">WATCHLIST Tracked</p>
+            <p className="text-2xl font-bold font-mono-data text-blue-400">{sampleSize?.total_watchlist_tracked ?? watchlistCount}</p>
+            {watchlistCount > 0 && <p className="text-xs text-slate-600 font-mono-data">{watchlistCount} resolved</p>}
           </div>
         </div>
         <div className="space-y-1">

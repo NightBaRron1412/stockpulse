@@ -227,10 +227,17 @@ def _run_validation_tests(signals: list) -> dict:
     n_watchlist = len(watchlist_10d)
     distinct_dates = len(set(s["signal_date"] for s in buy_10d))
 
+    # Total tracked (including unresolved)
+    total_buy = sum(1 for s in signals if s["action"] == "BUY")
+    total_watchlist = sum(1 for s in signals if s["action"] == "WATCHLIST")
+
     validation["sample_size"] = {
         "buy_signals": n_buy,
         "watchlist_signals": n_watchlist,
         "distinct_buy_dates": distinct_dates,
+        "total_buy_tracked": total_buy,
+        "total_watchlist_tracked": total_watchlist,
+        "total_tracked": len(signals),
         "phase": "pilot" if n_buy < 75 else ("meaningful" if n_buy < 150 else ("serious" if n_buy < 250 else "validated")),
     }
 

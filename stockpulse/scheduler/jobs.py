@@ -52,6 +52,14 @@ def intraday_check_job():
                     "invalidation": "",
                 }
                 dispatch_alert(alert)
+            # Track BUY/WATCHLIST signals from intraday changes for performance validation
+            for rec in recommendations:
+                if rec.get("action") in ("BUY", "WATCHLIST"):
+                    try:
+                        from stockpulse.research.tracker import log_signal
+                        log_signal(rec)
+                    except Exception:
+                        pass
             logger.info("Intraday: %d changes detected", len(changes))
         else:
             logger.info("Intraday: no changes detected")
