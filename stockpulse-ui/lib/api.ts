@@ -38,4 +38,9 @@ export const api = {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ start_date: startDate, end_date: endDate }),
     }),
+  allocate: (amount: number) =>
+    fetcher<any>("/api/allocate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount }),
+    }),
 };

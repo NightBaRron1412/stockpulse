@@ -486,6 +486,120 @@ def get_config_endpoint():
 
 
 # ═══════════════════════════════════════════════════
+# Portfolio Allocation Advisor
+# ═══════════════════════════════════════════════════
+
+@app.post("/api/allocate")
+def suggest_allocation(data: dict):
+    """Suggest portfolio allocation for a given investment amount."""
+    amount = float(data.get("amount", 0))
+    if amount <= 0:
+        raise HTTPException(400, "Amount must be positive")
+
+    all_recs = _get_latest_scan()
+
+    from stockpulse.portfolio.tracker import get_portfolio_status
+    from stockpulse.portfolio.risk import check_concentration_limits
+    from stockpulse.config.settings import load_portfolio, load_strategies
+
+    portfolio = get_portfolio_status()
+    positions = load_portfolio().get("positions", [])
+    strat = load_strategies()
+    risk_cfg = strat.get("risk", {})
+
+    total_portfolio = portfolio["total_current"] + amount
+
+    candidates = [r for r in all_recs if r.get("action") in ("BUY", "WATCHLIST")]
+    candidates.sort(key=lambda r: r.get("composite_score", 0), reverse=True)
+
+    allocations = []
+    remaining = amount
+    held_tickers = {p["ticker"] for p in positions}
+    max_positions = risk_cfg.get("max_positions", 8)
+    current_count = len(positions)
+
+    for rec in candidates[:15]:
+        if remaining <= 0 or current_count >= max_positions:
+            break
+
+        ticker = rec["ticker"]
+        score = rec.get("composite_score", 0)
+        action = rec.get("action", "HOLD")
+
+        risk_check = check_concentration_limits(ticker, positions, total_portfolio)
+
+        if not risk_check["allowed"] and ticker not in held_tickers:
+            continue
+
+        max_pct = risk_cfg.get("max_position_pct", 8)
+        max_dollars = total_portfolio * (max_pct / 100)
+        score_factor = min(abs(score) / 55, 1.0)
+        suggested_dollars = min(max_dollars * score_factor * risk_check.get("size_multiplier", 1.0), remaining)
+        suggested_dollars = round(suggested_dollars, 2)
+
+        if suggested_dollars < 50:
+            continue
+
+        allocations.append({
+            "ticker": ticker,
+            "action": action,
+            "score": round(score, 1),
+            "suggested_amount": suggested_dollars,
+            "suggested_pct": round((suggested_dollars / amount) * 100, 1),
+            "thesis": rec.get("thesis", ""),
+            "sector": risk_check.get("sector", ""),
+            "cluster": risk_check.get("cluster_tickers", []),
+            "already_held": ticker in held_tickers,
+            "risk_flags": risk_check.get("reasons", []),
+        })
+
+        remaining -= suggested_dollars
+        if ticker not in held_tickers:
+            current_count += 1
+
+    cash_reserve = max(remaining, 0)
+
+    current_analysis = []
+    for pos in portfolio["positions"]:
+        ticker = pos["ticker"]
+        rec = next((r for r in all_recs if r.get("ticker") == ticker), None)
+        signal = rec.get("action", "UNKNOWN") if rec else "UNKNOWN"
+        current_analysis.append({
+            "ticker": ticker,
+            "current_value": pos["current_value"],
+            "pnl_pct": pos["pnl_pct"],
+            "signal": signal,
+            "suggestion": "HOLD" if signal in ("BUY", "WATCHLIST", "HOLD") else "REVIEW" if signal == "CAUTION" else "CONSIDER TRIMMING" if signal == "SELL" else "MONITOR",
+        })
+
+    rationale = ""
+    try:
+        from stockpulse.llm.summarizer import _call_llm
+        alloc_summary = ", ".join(f"{a['ticker']} ${a['suggested_amount']:.0f} ({a['action']})" for a in allocations[:5])
+        prompt = (
+            f"You are a portfolio advisor. A user has ${amount:,.0f} to invest. "
+            f"Based on signal analysis, the suggested allocation is: {alloc_summary}. "
+            f"Cash reserve: ${cash_reserve:,.0f}. "
+            f"Current holdings: {', '.join(f'{p[\"ticker\"]} ({p[\"pnl_pct\"]:+.1f}%)' for p in current_analysis)}. "
+            f"Write a 3-4 sentence rationale explaining the allocation strategy. "
+            f"Mention diversification, signal strength, and any risks. No disclaimers."
+        )
+        rationale = _call_llm(prompt, max_tokens=200) or ""
+    except Exception:
+        rationale = ""
+
+    return {
+        "amount": amount,
+        "allocations": allocations,
+        "cash_reserve": round(cash_reserve, 2),
+        "cash_reserve_pct": round((cash_reserve / amount) * 100, 1) if amount > 0 else 0,
+        "current_holdings": current_analysis,
+        "total_portfolio_after": round(total_portfolio, 2),
+        "rationale": rationale.strip() if rationale else "Allocation based on signal strength, risk limits, and sector diversification.",
+    }
+
+
+# ═══════════════════════════════════════════════════
 # Watchlist management
 # ═══════════════════════════════════════════════════
 

@@ -30,10 +30,19 @@ export default function PortfolioPage() {
     }
   };
 
+  const pageHeader = (
+    <div className="flex items-center justify-between">
+      <h1 className="text-2xl font-semibold">Portfolio</h1>
+      <a href="/allocate" className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">
+        Allocate Funds →
+      </a>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Portfolio</h1>
+        {pageHeader}
         <div className="grid grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="glass-card p-6 animate-pulse">
@@ -49,7 +58,7 @@ export default function PortfolioPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Portfolio</h1>
+        {pageHeader}
         <div className="glass-card p-6 text-red-400">Failed to load portfolio: {error}</div>
       </div>
     );
@@ -58,7 +67,7 @@ export default function PortfolioPage() {
   if (!data || !data.positions || data.positions.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Portfolio</h1>
+        {pageHeader}
         <div className="glass-card p-8 text-center text-slate-500">
           No positions yet -- portfolio tracking will appear after you add trades
         </div>
@@ -70,7 +79,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Portfolio</h1>
+      {pageHeader}
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
