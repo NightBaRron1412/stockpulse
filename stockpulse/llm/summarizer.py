@@ -32,13 +32,13 @@ def _get_client():
             return None
     return _client
 
-def _call_llm(prompt: str, max_tokens: int = 300) -> str | None:
+def _call_llm(prompt: str, max_tokens: int = 300, model: str | None = None) -> str | None:
     client = _get_client()
     if client is None:
         return None
     cfg = get_config()
     try:
-        response = client.messages.create(model=cfg["llm_model"], max_tokens=max_tokens,
+        response = client.messages.create(model=model or cfg["llm_model"], max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}])
         return response.content[0].text
     except Exception:

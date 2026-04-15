@@ -16,7 +16,7 @@ def get_config() -> dict:
         "llm_enabled": os.getenv("LLM_ENABLED", "true").lower() == "true",
         "llm_base_url": os.getenv("LLM_BASE_URL", os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")),
         "llm_api_key": os.getenv("LLM_API_KEY", "").strip() or os.getenv("ANTHROPIC_API_KEY", ""),
-        "llm_model": os.getenv("LLM_MODEL", "Claude-Sonnet-4.6"),
+        "llm_model": os.getenv("LLM_MODEL", "claude-opus-4-6"),
         "alerts_telegram": os.getenv("ALERTS_TELEGRAM", "false").lower() == "true",
         "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
         "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", ""),
