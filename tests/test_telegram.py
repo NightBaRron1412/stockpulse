@@ -209,7 +209,10 @@ def test_send_calls_async_when_configured(mock_send, mock_cfg):
 @patch("stockpulse.alerts.telegram_alert.get_config", return_value=_ENABLED_FULL)
 @patch("stockpulse.alerts.telegram_alert.asyncio")
 def test_send_passes_token_and_chat_id(mock_asyncio, mock_cfg):
-    """Verify asyncio.run is called with the correct token and chat_id."""
-    mock_asyncio.run.return_value = True
+    """Verify asyncio loop is created and used."""
+    mock_loop = mock_asyncio.new_event_loop.return_value
+    mock_loop.run_until_complete.return_value = True
     send_telegram_alert({"ticker": "X", "action": "BUY", "confidence": 50, "thesis": ""})
-    mock_asyncio.run.assert_called_once()
+    mock_asyncio.new_event_loop.assert_called_once()
+    mock_loop.run_until_complete.assert_called_once()
+    mock_loop.close.assert_called_once()

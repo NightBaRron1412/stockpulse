@@ -67,7 +67,12 @@ def send_telegram_alert(alert: dict) -> bool:
         return False
     text = _format_message(alert)
     try:
-        return asyncio.run(_send_async(token, chat_id, text))
+        # Use new event loop to avoid conflict with any running loop (e.g. FastAPI/uvicorn)
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_send_async(token, chat_id, text))
+        finally:
+            loop.close()
     except Exception:
         logger.exception("Telegram alert failed")
         return False

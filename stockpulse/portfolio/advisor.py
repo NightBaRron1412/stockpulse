@@ -310,7 +310,7 @@ def _evaluate_risk_actions(ctx: dict, rec_map: dict, state: dict, config: dict) 
             scan_count = ta.get("scan_count", 0)
             eod_count = ta.get("eod_count", 0)
 
-            if scan_count >= persist_needed or eod_count >= 1:
+            if eod_count >= 1 or scan_count >= persist_needed * 3:
                 if _check_min_hold(state, ticker, config) and _can_trim(state, ticker, config):
                     frac = trim_cfg.get("trim_fraction", 0.25)
                     # Trim more aggressively for very negative scores
@@ -658,6 +658,7 @@ def _evaluate_near_misses(ctx: dict, rec_map: dict, state: dict, config: dict,
 
         check = check_watchlist_starter_eligible(
             rec, ctx["positions"], ctx["total"], ctx["held_tickers"], alloc_cfg,
+            clusters_used=set(),
         )
 
         if check["eligible"]:
@@ -831,9 +832,11 @@ def generate_eod_plan(recommendations: list[dict]) -> dict:
     ranked plan with net cash impact and a narrative summary.
     """
     config = _get_config()
-    state = _load_state()
 
     suggestions = evaluate(recommendations, scan_trigger="eod")
+
+    # Reload state AFTER evaluate() since it saves updated suggestions
+    state = _load_state()
 
     # Categorize
     exits = [s for s in suggestions if s.suggestion_type == SuggestionType.EXIT]
@@ -926,7 +929,7 @@ def generate_eod_plan(recommendations: list[dict]) -> dict:
     return plan
 
 
-def get_latest_suggestions() -> list[dict]:
+def get_latest_suggestions() -> dict:
     """Read current suggestions from state file."""
     state = _load_state()
     return {

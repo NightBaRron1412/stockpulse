@@ -1,9 +1,7 @@
 discovered:
-- ADI
 - ANET
 - AVGO
 - CAT
-- CIEN
 - CMI
 - COHR
 - DLR
@@ -18,24 +16,16 @@ discovered:
 - GRMN
 - HLT
 - HUBB
-- INTC
 - JBHT
 - JBL
-- KEYS
 - KLAC
-- LITE
 - LRCX
 - MPWR
-- NFLX
-- NUE
 - 'ON'
 - PSA
 - STX
 - TEL
-- TER
-- TT
 - VRT
-- WAB
 - WDC
 priority:
 - action: WATCHLIST
@@ -107,9 +97,6 @@ priority:
 - action: WATCHLIST
   score: 26.7
   ticker: 'ON'
-- action: HOLD
-  score: 26.6
-  ticker: ADI
 - action: WATCHLIST
   score: 26.4
   ticker: JBHT
@@ -138,26 +125,11 @@ priority:
   score: 25.1
   ticker: TEL
 - action: HOLD
-  score: 24.7
-  ticker: CIEN
-- action: HOLD
   score: 24.2
   ticker: AMZN
 - action: HOLD
   score: 23.3
   ticker: NVDA
-- action: HOLD
-  score: 23.2
-  ticker: NFLX
-- action: HOLD
-  score: 21.8
-  ticker: TER
-- action: HOLD
-  score: 21.7
-  ticker: NUE
-- action: HOLD
-  score: 21.3
-  ticker: INTC
 - action: HOLD
   score: 20.5
   ticker: SNDK
@@ -165,23 +137,11 @@ priority:
   score: -20.3
   ticker: NOW
 - action: HOLD
-  score: 19.3
-  ticker: KEYS
-- action: HOLD
   score: -16.7
   ticker: DT
 - action: HOLD
-  score: 16.7
-  ticker: WAB
-- action: HOLD
-  score: 12.7
-  ticker: TT
-- action: HOLD
   score: 12.2
   ticker: META
-- action: HOLD
-  score: 9.2
-  ticker: LITE
 - action: HOLD
   score: 8.2
   ticker: MSFT

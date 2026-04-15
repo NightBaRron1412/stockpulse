@@ -261,8 +261,11 @@ def get_portfolio():
     from stockpulse.portfolio.risk import check_drawdown_status
     from stockpulse.config.settings import load_portfolio
     status = get_portfolio_status()
-    peak = max(status["total_current"], status["total_invested"]) if status["total_invested"] > 0 else 1
-    dd = check_drawdown_status(status["total_current"], peak)
+    port = load_portfolio()
+    peak = port.get("peak_equity", max(status["total_current"], status["total_invested"]))
+    if status["total_current"] + port.get("cash", 0) > peak:
+        peak = status["total_current"] + port.get("cash", 0)
+    dd = check_drawdown_status(status["total_current"] + port.get("cash", 0), peak)
     port = load_portfolio()
     cash = port.get("cash", 0)
     return {**status, "drawdown": dd, "cash": cash}

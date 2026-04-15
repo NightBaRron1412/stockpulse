@@ -98,7 +98,7 @@ def _update_scan_json(new_recs: list[dict]) -> None:
             # Merge: replace existing tickers with fresh data
             existing = {r["ticker"]: r for r in data["recommendations"]}
             for rec in new_recs:
-                clean = {k: v for k, v in rec.items() if k != "signals" or isinstance(v, dict)}
+                clean = {k: v for k, v in rec.items() if k != "signals"}
                 existing[rec["ticker"]] = clean
             data["recommendations"] = list(existing.values())
 
@@ -198,7 +198,9 @@ def _cleanup_discovered(ranked: list[dict], wl: dict, user_tickers: set) -> None
             continue  # never remove user tickers
 
         rec = rec_map.get(ticker)
-        if rec and rec["action"] in ("BUY", "WATCHLIST"):
+        if rec is None:
+            continue  # Ticker not in scan results (API failure, filtered) — don't penalize
+        if rec["action"] in ("BUY", "WATCHLIST"):
             # Still active — reset counter
             state[ticker] = 0
         else:

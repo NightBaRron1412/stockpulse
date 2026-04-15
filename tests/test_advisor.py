@@ -423,12 +423,12 @@ class TestCautionPersistence:
         assert len(trims) == 0
 
     def test_caution_scan2_generates_trim(self):
-        """scan_count=2 (persisted 2 scans) -> ACTIONABLE TRIM."""
+        """eod_count=1 (persisted 1 EOD) -> ACTIONABLE TRIM."""
         pos = _position("MSFT", current_price=100, shares=10)
         ctx = _ctx(positions=[pos])
         rec_map = {"MSFT": _rec("MSFT", action="CAUTION", score=-15)}
         state = _state(
-            ticker_actions={"MSFT": {"action": "CAUTION", "scan_count": 2, "eod_count": 0}},
+            ticker_actions={"MSFT": {"action": "CAUTION", "scan_count": 6, "eod_count": 1}},
         )
         config = _config()
 
@@ -1242,7 +1242,7 @@ class TestCautionAggressiveTrimOnLowScore:
         ctx = _ctx(positions=[pos])
         rec_map = {"BAD": _rec("BAD", action="CAUTION", score=-60)}
         state = _state(
-            ticker_actions={"BAD": {"action": "CAUTION", "scan_count": 3, "eod_count": 0}},
+            ticker_actions={"BAD": {"action": "CAUTION", "scan_count": 6, "eod_count": 1}},
         )
         config = _config()
 

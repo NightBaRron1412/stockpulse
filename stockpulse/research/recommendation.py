@@ -98,16 +98,15 @@ def generate_recommendation(ticker: str, df: pd.DataFrame, use_llm: bool = True)
     if action == "BUY" and not confirmation["passes"]:
         action = "WATCHLIST"
 
-    # ---- PEAD overlay (event-driven, not weighted) ----
+    # ---- Score acceleration modifier (uses raw composite, before PEAD overlay) ----
+    accel_bonus = compute_score_acceleration(ticker, composite, confirmation)
+    composite += accel_bonus
+
+    # ---- PEAD overlay (event-driven, not weighted, applied after accel) ----
     pead_score = calc_pead_score(ticker)
     if abs(pead_score) > 5:
         signals["pead"] = {"score": pead_score, "weight": 0.0, "value": pead_score}
-        # PEAD modifies the composite directly (not weighted, it's an event overlay)
         composite += pead_score * 0.15
-
-    # ---- Score acceleration modifier ----
-    accel_bonus = compute_score_acceleration(ticker, composite, confirmation)
-    composite += accel_bonus
 
     # Re-classify with updated composite
     action = classify_action(composite)

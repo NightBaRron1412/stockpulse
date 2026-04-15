@@ -63,6 +63,7 @@ def get_price_history(
         df = yf.download(ticker, start=start, interval=interval, progress=False, timeout=15)
         if df.empty:
             logger.warning("No price data for %s", ticker)
+            set_cached(cache_key, pd.DataFrame())  # Cache empty to avoid repeated API calls
             return pd.DataFrame()
         # yf.download returns MultiIndex columns for single ticker — flatten
         if isinstance(df.columns, pd.MultiIndex):

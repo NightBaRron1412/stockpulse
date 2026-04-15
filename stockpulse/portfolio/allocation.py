@@ -15,9 +15,8 @@ def check_buy_eligible(rec: dict, positions: list[dict], portfolio_value: float,
     from stockpulse.portfolio.risk import check_concentration_limits
 
     ticker = rec["ticker"]
-    if len([p for p in positions if p["ticker"] not in held_tickers]) + len(positions) >= max_positions:
-        if ticker not in held_tickers:
-            return None
+    if len(positions) >= max_positions and ticker not in held_tickers:
+        return None
 
     risk_check = check_concentration_limits(ticker, positions, portfolio_value)
     if not risk_check["allowed"] and ticker not in held_tickers:
