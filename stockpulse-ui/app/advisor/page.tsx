@@ -32,7 +32,11 @@ const SEVERITY_CONFIG = {
   },
 };
 
-function SuggestionCard({ suggestion, onDismiss }: { suggestion: AdvisorSuggestion; onDismiss: (hash: string) => void }) {
+function SuggestionCard({ suggestion, onDismiss, onExecute }: {
+  suggestion: AdvisorSuggestion;
+  onDismiss: (hash: string) => void;
+  onExecute: (suggestion: AdvisorSuggestion) => void;
+}) {
   const sev = SEVERITY_CONFIG[suggestion.severity] || SEVERITY_CONFIG.info;
 
   return (
@@ -52,14 +56,25 @@ function SuggestionCard({ suggestion, onDismiss }: { suggestion: AdvisorSuggesti
             </span>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onDismiss(suggestion.hash)}
-          className="text-slate-500 hover:text-slate-300 text-xs shrink-0"
-        >
-          Dismiss
-        </Button>
+        <div className="flex gap-1.5 shrink-0">
+          {suggestion.suggested_amount != null && suggestion.suggested_amount > 0 && (
+            <Button
+              size="sm"
+              onClick={() => onExecute(suggestion)}
+              className="bg-green-600/80 hover:bg-green-600 text-white text-xs h-7 px-2.5"
+            >
+              I Did This
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDismiss(suggestion.hash)}
+            className="text-slate-500 hover:text-slate-300 text-xs h-7"
+          >
+            Dismiss
+          </Button>
+        </div>
       </div>
 
       <p className="text-sm text-slate-200 font-medium">{suggestion.summary}</p>
@@ -182,6 +197,30 @@ export default function AdvisorPage() {
     }
   }
 
+  async function handleExecute(suggestion: AdvisorSuggestion) {
+    const price = prompt(`Enter execution price for ${suggestion.ticker}:`);
+    if (!price) return;
+    const shares = suggestion.suggested_amount
+      ? prompt(`Enter shares (suggested ~$${suggestion.suggested_amount.toFixed(0)} worth):`)
+      : prompt("Enter shares:");
+    if (!shares) return;
+
+    try {
+      await api.advisorExecute({
+        hash: suggestion.hash,
+        ticker: suggestion.ticker,
+        action: suggestion.action,
+        shares: parseFloat(shares),
+        price: parseFloat(price),
+        swap_out_ticker: suggestion.swap_out_ticker,
+        swap_out_price: suggestion.swap_out_score ? undefined : undefined,
+      });
+      refresh();
+    } catch (e: any) {
+      alert(`Execution failed: ${e.message}`);
+    }
+  }
+
   const suggestions = data?.suggestions ?? [];
   const regime = data?.regime;
   const urgent = suggestions.filter((s) => s.severity === "urgent");
@@ -271,7 +310,7 @@ export default function AdvisorPage() {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-red-400 uppercase tracking-wider">Urgent Actions</h2>
           {urgent.map((s) => (
-            <SuggestionCard key={s.hash} suggestion={s} onDismiss={handleDismiss} />
+            <SuggestionCard key={s.hash} suggestion={s} onDismiss={handleDismiss} onExecute={handleExecute} />
           ))}
         </div>
       )}
@@ -281,7 +320,7 @@ export default function AdvisorPage() {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">Actionable</h2>
           {actionable.map((s) => (
-            <SuggestionCard key={s.hash} suggestion={s} onDismiss={handleDismiss} />
+            <SuggestionCard key={s.hash} suggestion={s} onDismiss={handleDismiss} onExecute={handleExecute} />
           ))}
         </div>
       )}
@@ -291,7 +330,7 @@ export default function AdvisorPage() {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-blue-400 uppercase tracking-wider">Informational</h2>
           {info.map((s) => (
-            <SuggestionCard key={s.hash} suggestion={s} onDismiss={handleDismiss} />
+            <SuggestionCard key={s.hash} suggestion={s} onDismiss={handleDismiss} onExecute={handleExecute} />
           ))}
         </div>
       )}

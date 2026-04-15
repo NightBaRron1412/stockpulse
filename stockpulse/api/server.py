@@ -823,7 +823,6 @@ def suggest_allocation(data: dict):
     all_recs = _get_latest_scan()
 
     from stockpulse.portfolio.tracker import get_portfolio_status
-    from stockpulse.portfolio.risk import check_concentration_limits
     from stockpulse.config.settings import load_portfolio, load_strategies
 
     portfolio = get_portfolio_status()
@@ -855,10 +854,13 @@ def suggest_allocation(data: dict):
         candidates = [r for r in all_recs if r.get("action") in ("BUY", "WATCHLIST")]
     candidates.sort(key=lambda r: r.get("composite_score", 0), reverse=True)
 
+    from stockpulse.portfolio.allocation import (
+        check_buy_eligible, check_watchlist_starter_eligible,
+        compute_buy_size, compute_starter_size,
+    )
+
     alloc_cfg = strat.get("allocation", {})
     starter_enabled = alloc_cfg.get("watchlist_starter_enabled", True)
-    starter_min_score = alloc_cfg.get("watchlist_starter_min_score", 30)
-    starter_size_ratio = alloc_cfg.get("watchlist_starter_size", 0.33)
     max_wl_sleeve_pct = alloc_cfg.get("max_watchlist_sleeve", 0.25)
     max_wl_names = alloc_cfg.get("max_watchlist_names", 3)
 
@@ -866,30 +868,24 @@ def suggest_allocation(data: dict):
     remaining = amount
     held_tickers = {p["ticker"] for p in positions}
     max_positions = risk_cfg.get("max_positions", 8)
-    max_pct = risk_cfg.get("max_position_pct", 8)
     current_count = len(positions)
 
-    # Separate BUY and eligible WATCHLIST candidates
     buy_candidates = [r for r in candidates if r.get("action") == "BUY"]
-    wl_candidates = [
-        r for r in candidates
-        if r.get("action") == "WATCHLIST" and r.get("composite_score", 0) >= starter_min_score
-    ]
+    wl_candidates = [r for r in candidates if r.get("action") == "WATCHLIST"]
 
     # --- BUY candidates: full position sizing ---
     for rec in buy_candidates[:15]:
-        if remaining <= 0 or current_count >= max_positions:
+        if remaining <= 0:
             break
 
         ticker = rec["ticker"]
         score = rec.get("composite_score", 0)
 
-        risk_check = check_concentration_limits(ticker, positions, total_portfolio)
-        if not risk_check["allowed"] and ticker not in held_tickers:
+        risk_check = check_buy_eligible(rec, positions, total_portfolio, held_tickers, max_positions)
+        if risk_check is None:
             continue
 
-        score_factor = min(abs(score) / 55, 1.0)
-        full_dollars = total_portfolio * (max_pct / 100) * score_factor * risk_check.get("size_multiplier", 1.0)
+        full_dollars = compute_buy_size(total_portfolio, score, risk_cfg, risk_check.get("size_multiplier", 1.0))
         suggested_dollars = round(min(full_dollars, remaining), 2)
 
         if suggested_dollars < 50:
@@ -914,7 +910,7 @@ def suggest_allocation(data: dict):
         if ticker not in held_tickers:
             current_count += 1
 
-    # --- WATCHLIST starters: 33% size, strict qualifiers, capped sleeve ---
+    # --- WATCHLIST starters: uses shared 7-qualifier check ---
     max_wl_dollars = amount * max_wl_sleeve_pct
     wl_allocated = 0.0
     wl_count = 0
@@ -928,53 +924,18 @@ def suggest_allocation(data: dict):
             ticker = rec["ticker"]
             score = rec.get("composite_score", 0)
 
-            # Requirement 1: trend bucket must confirm
-            confirmation = rec.get("confirmation", {})
-            trend_confirms = confirmation.get("buckets", {}).get("trend", {}).get("confirms", False)
-            if not trend_confirms:
+            check = check_watchlist_starter_eligible(
+                rec, positions, total_portfolio, held_tickers, alloc_cfg, wl_clusters_used,
+            )
+            if not check["eligible"]:
                 continue
 
-            # Requirement 2: relative strength score >= 60
-            rs_score = rec.get("signals", {}).get("relative_strength", {}).get("score", 0)
-            if rs_score < 60:
-                continue
+            risk_check = check.get("risk_check", {})
+            cluster_key = check.get("cluster_key", frozenset())
 
-            # Requirement 3: no earnings blackout (earnings score != -30)
-            earnings_score = rec.get("signals", {}).get("earnings", {}).get("score", 0)
-            if earnings_score <= -30:
-                continue
-
-            # Requirement 4: concentration limits must pass
-            risk_check = check_concentration_limits(ticker, positions, total_portfolio)
-            if not risk_check["allowed"] and ticker not in held_tickers:
-                continue
-
-            # Requirement 5: max 1 per cluster
-            cluster_tickers = risk_check.get("cluster_tickers", [])
-            cluster_key = frozenset(cluster_tickers + [ticker])
-            if any(c in wl_clusters_used for c in cluster_key):
-                continue
-
-            # Requirement 6: price above 20 EMA — check signals or thesis
-            signals = rec.get("signals", {})
-            ma_signals = signals.get("moving_averages", {})
-            price_above_20ema = ma_signals.get("price_above_20ema", None)
-            if price_above_20ema is None:
-                # Fallback: check thesis text for explicit invalidation cue
-                thesis_text = rec.get("thesis", "").lower()
-                price_above_20ema = "below 20" not in thesis_text and "under 20 ema" not in thesis_text
-            if not price_above_20ema:
-                continue
-
-            # Requirement 7: not invalidated
-            if rec.get("invalidated", False):
-                continue
-
-            # Starter sizing: 33% of what a full BUY would get
-            score_factor = min(abs(score) / 55, 1.0)
-            full_dollars = total_portfolio * (max_pct / 100) * score_factor * risk_check.get("size_multiplier", 1.0)
-            starter_dollars = round(
-                min(full_dollars * starter_size_ratio, remaining, max_wl_dollars - wl_allocated), 2
+            full_dollars = compute_buy_size(total_portfolio, score, risk_cfg, risk_check.get("size_multiplier", 1.0))
+            starter_dollars = compute_starter_size(
+                full_dollars, alloc_cfg, remaining=remaining, sleeve_remaining=max_wl_dollars - wl_allocated,
             )
 
             if starter_dollars < 50:
@@ -1149,6 +1110,142 @@ def get_advisor_plan():
 def get_advisor_config():
     from stockpulse.config.settings import load_strategies
     return load_strategies().get("portfolio_advisor", {})
+
+
+@app.post("/api/advisor/execute")
+def execute_suggestion(data: dict):
+    """Mark a suggestion as executed — updates portfolio positions, cash, and lots."""
+    import yaml
+    import uuid
+    from datetime import datetime
+    from stockpulse.config.settings import load_portfolio
+
+    suggestion_hash = data.get("hash", "")
+    ticker = data.get("ticker", "").upper()
+    action = data.get("action", "")
+    shares = data.get("shares")
+    price = data.get("price")
+
+    if not ticker or not action:
+        raise HTTPException(400, "ticker and action required")
+
+    port = load_portfolio()
+    positions = port.get("positions", [])
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if action in ("BUY", "WATCH"):
+        # Add/update position
+        if shares is None or price is None:
+            raise HTTPException(400, "shares and price required for BUY")
+        shares = float(shares)
+        price = float(price)
+        cost = round(shares * price, 2)
+
+        existing = next((p for p in positions if p["ticker"] == ticker), None)
+        if existing:
+            existing["shares"] = round(existing["shares"] + shares, 6)
+            existing.setdefault("lots", []).append({
+                "lot_id": str(uuid.uuid4())[:8],
+                "shares": shares,
+                "cost_basis": price,
+                "acquired_at": today,
+                "source": "executed",
+            })
+            # Update weighted avg entry price
+            total_cost = sum(l["shares"] * l["cost_basis"] for l in existing["lots"])
+            existing["entry_price"] = round(total_cost / existing["shares"], 2) if existing["shares"] > 0 else price
+        else:
+            positions.append({
+                "ticker": ticker,
+                "shares": shares,
+                "entry_price": price,
+                "entry_date": today,
+                "lots": [{
+                    "lot_id": str(uuid.uuid4())[:8],
+                    "shares": shares,
+                    "cost_basis": price,
+                    "acquired_at": today,
+                    "source": "executed",
+                }],
+            })
+
+        # Deduct cash
+        port["cash"] = max(0, port.get("cash", 0) - cost)
+
+    elif action in ("SELL", "TRIM"):
+        # Remove/reduce position
+        existing = next((p for p in positions if p["ticker"] == ticker), None)
+        if not existing:
+            raise HTTPException(404, f"No position in {ticker}")
+
+        if shares is None:
+            shares = existing["shares"]  # Full exit
+        shares = float(shares)
+        sell_price = float(price) if price else 0
+
+        # Add cash from sale
+        port["cash"] = port.get("cash", 0) + round(shares * sell_price, 2)
+
+        # Reduce shares
+        existing["shares"] = round(existing["shares"] - shares, 6)
+        if existing["shares"] <= 0.001:
+            positions = [p for p in positions if p["ticker"] != ticker]
+        else:
+            # Remove lots FIFO
+            remaining = shares
+            new_lots = []
+            for lot in existing.get("lots", []):
+                if remaining <= 0:
+                    new_lots.append(lot)
+                elif lot["shares"] <= remaining:
+                    remaining -= lot["shares"]
+                else:
+                    lot["shares"] = round(lot["shares"] - remaining, 6)
+                    remaining = 0
+                    new_lots.append(lot)
+            existing["lots"] = new_lots
+
+    elif action == "SWAP":
+        # Sell outgoing + buy incoming
+        out_ticker = data.get("swap_out_ticker", "").upper()
+        if not out_ticker:
+            raise HTTPException(400, "swap_out_ticker required for SWAP")
+        # Sell the outgoing
+        out_pos = next((p for p in positions if p["ticker"] == out_ticker), None)
+        if out_pos:
+            sell_price = float(data.get("swap_out_price", 0))
+            port["cash"] = port.get("cash", 0) + round(out_pos["shares"] * sell_price, 2)
+            positions = [p for p in positions if p["ticker"] != out_ticker]
+        # Buy the incoming
+        if shares and price:
+            shares = float(shares)
+            price = float(price)
+            positions.append({
+                "ticker": ticker,
+                "shares": shares,
+                "entry_price": price,
+                "entry_date": today,
+                "lots": [{
+                    "lot_id": str(uuid.uuid4())[:8],
+                    "shares": shares,
+                    "cost_basis": price,
+                    "acquired_at": today,
+                    "source": "executed",
+                }],
+            })
+            port["cash"] = max(0, port.get("cash", 0) - round(shares * price, 2))
+
+    port["positions"] = positions
+    port_path = PROJECT_ROOT / "stockpulse" / "config" / "portfolio.yaml"
+    with open(port_path, "w") as f:
+        yaml.dump(port, f, default_flow_style=False, sort_keys=False)
+
+    # Acknowledge the suggestion
+    if suggestion_hash:
+        from stockpulse.portfolio.advisor import acknowledge_suggestion
+        acknowledge_suggestion(suggestion_hash)
+
+    return {"status": "executed", "ticker": ticker, "action": action, "cash": port.get("cash", 0)}
 
 
 @app.post("/api/watchlist/add")

@@ -58,5 +58,10 @@ export const api = {
     body: JSON.stringify({ hash }),
   }),
   advisorEvaluate: () => fetcher<any>("/api/advisor/evaluate", { method: "POST" }),
+  advisorExecute: (data: { hash: string; ticker: string; action: string; shares?: number; price?: number; swap_out_ticker?: string; swap_out_price?: number }) =>
+    fetcher<any>("/api/advisor/execute", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
   advisorConfig: () => fetcher<any>("/api/advisor/config"),
 };

@@ -240,6 +240,22 @@ def dispatch_portfolio_alerts() -> None:
             "invalidation": alert["invalidation"],
         })
 
+    # Update peak equity for accurate drawdown tracking
+    try:
+        import yaml
+        port = load_portfolio()
+        status = get_portfolio_status()
+        current_equity = status["total_current"] + port.get("cash", 0)
+        peak = port.get("peak_equity", 0)
+        if current_equity > peak:
+            port["peak_equity"] = round(current_equity, 2)
+            port_path = Path(__file__).resolve().parent.parent / "config" / "portfolio.yaml"
+            with open(port_path, "w") as f:
+                yaml.dump(port, f, default_flow_style=False, sort_keys=False)
+            logger.info("Peak equity updated: $%.2f", current_equity)
+    except Exception:
+        logger.debug("Failed to update peak equity")
+
     logger.info(
         "Portfolio check: %d milestone alerts, %d invalidation alerts",
         len(milestone_alerts), len(inv_alerts),
