@@ -575,12 +575,19 @@ def suggest_allocation(data: dict):
     rationale = ""
     try:
         from stockpulse.llm.summarizer import _call_llm
-        alloc_summary = ", ".join(f"{a['ticker']} ${a['suggested_amount']:.0f} ({a['action']})" for a in allocations[:5])
+        alloc_parts = []
+        for a in allocations[:5]:
+            alloc_parts.append(f"{a['ticker']} ${a['suggested_amount']:.0f} ({a['action']})")
+        alloc_summary = ", ".join(alloc_parts)
+        holdings_parts = []
+        for p in current_analysis:
+            holdings_parts.append(f"{p['ticker']} ({p['pnl_pct']:+.1f}%)")
+        holdings_summary = ", ".join(holdings_parts)
         prompt = (
             f"You are a portfolio advisor. A user has ${amount:,.0f} to invest. "
             f"Based on signal analysis, the suggested allocation is: {alloc_summary}. "
             f"Cash reserve: ${cash_reserve:,.0f}. "
-            f"Current holdings: {', '.join(f'{p[\"ticker\"]} ({p[\"pnl_pct\"]:+.1f}%)' for p in current_analysis)}. "
+            f"Current holdings: {holdings_summary}. "
             f"Write a 3-4 sentence rationale explaining the allocation strategy. "
             f"Mention diversification, signal strength, and any risks. No disclaimers."
         )
