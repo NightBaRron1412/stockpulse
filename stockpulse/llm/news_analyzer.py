@@ -25,7 +25,8 @@ def _get_llm_client():
     try:
         from stockpulse.llm.summarizer import _get_client
         return _get_client()
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to get LLM client for news analysis: %s", str(e)[:80])
         return None
 
 
@@ -54,8 +55,8 @@ def analyze_news_sentiment(ticker: str) -> dict:
     if client is not None:
         try:
             return _llm_analyze(client, ticker, headlines)
-        except Exception:
-            logger.debug("LLM news analysis failed for %s, using fallback", ticker)
+        except Exception as e:
+            logger.warning("LLM news analysis failed for %s: %s — using keyword fallback", ticker, str(e)[:80])
 
     # Fallback: simple keyword counting (weight stays low)
     return _fallback_analyze(ticker, headlines)

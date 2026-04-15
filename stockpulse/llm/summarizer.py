@@ -27,22 +27,29 @@ def _get_client():
                 base_url=cfg["llm_base_url"],
                 default_headers=custom_headers,
             )
-        except Exception:
-            logger.warning("Failed to initialize Anthropic client")
+            logger.info("LLM client initialized: base_url=%s, model=%s, custom_headers=%s",
+                        cfg["llm_base_url"], cfg["llm_model"], bool(custom_headers))
+        except Exception as e:
+            logger.error("Failed to initialize Anthropic client: %s", str(e)[:100])
             return None
     return _client
 
 def _call_llm(prompt: str, max_tokens: int = 300, model: str | None = None) -> str | None:
     client = _get_client()
     if client is None:
+        logger.warning("LLM client not initialized — using fallback")
         return None
     cfg = get_config()
+    use_model = model or cfg["llm_model"]
     try:
-        response = client.messages.create(model=model or cfg["llm_model"], max_tokens=max_tokens,
+        logger.info("LLM call: model=%s, prompt_len=%d", use_model, len(prompt))
+        response = client.messages.create(model=use_model, max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}])
-        return response.content[0].text
-    except Exception:
-        logger.debug("LLM call failed, falling back to rules-based")
+        result = response.content[0].text
+        logger.info("LLM success: model=%s, response_len=%d", use_model, len(result))
+        return result
+    except Exception as e:
+        logger.warning("LLM call failed (model=%s): %s — using fallback", use_model, str(e)[:100])
         return None
 
 def generate_thesis(ticker: str, action: str, signals: dict, composite: float) -> str:

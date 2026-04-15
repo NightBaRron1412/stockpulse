@@ -589,7 +589,7 @@ def suggest_allocation(data: dict):
             f"Cash reserve: ${cash_reserve:,.0f}. "
             f"Current holdings: {holdings_summary}. "
             f"Write a 3-4 sentence rationale explaining the allocation strategy. "
-            f"Mention diversification, signal strength, and any risks. No disclaimers."
+            f"Mention diversification, signal strength, and any risks. No disclaimers. No markdown formatting — write plain text only."
         )
         from stockpulse.config.settings import get_config as _gc
         rationale = _call_llm(prompt, max_tokens=200, model=_gc()["llm_model_premium"]) or ""

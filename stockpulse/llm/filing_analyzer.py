@@ -33,13 +33,14 @@ def analyze_filing_direction(
         client = _get_client()
         if client is None:
             return _fallback_direction(form, items, description)
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM client failed for filing analysis: %s", str(e)[:80])
         return _fallback_direction(form, items, description)
 
     try:
         return _llm_direction(client, ticker, form, items, description)
-    except Exception:
-        logger.debug("LLM filing direction failed for %s %s", ticker, form)
+    except Exception as e:
+        logger.warning("LLM filing direction failed for %s %s: %s — using fallback", ticker, form, str(e)[:80])
         return _fallback_direction(form, items, description)
 
 
