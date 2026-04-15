@@ -64,14 +64,22 @@ def log_signal(recommendation: dict) -> None:
     # Check for existing entry on same day
     existing = next((s for s in tracker["signals"] if s["ticker"] == ticker and s["signal_date"] == today), None)
     if existing:
-        # Allow upgrade: WATCHLIST → BUY (update in place)
-        if existing["action"] == "WATCHLIST" and action == "BUY":
+        prev_action = existing["action"]
+        # Allow upgrade: WATCHLIST → BUY
+        if prev_action == "WATCHLIST" and action == "BUY":
             existing["action"] = "BUY"
             existing["composite_score"] = recommendation.get("composite_score", 0)
             existing["confidence"] = recommendation.get("confidence", 0)
             existing["thesis"] = recommendation.get("thesis", "")[:200]
+            existing["flipped_back"] = False
             _save_tracker(tracker)
             logger.info("Upgraded tracked signal: %s WATCHLIST → BUY", ticker)
+        # Track downgrade: BUY → WATCHLIST (mark as flipped back)
+        elif prev_action == "BUY" and action == "WATCHLIST":
+            existing["flipped_back"] = True
+            existing["flipped_back_score"] = recommendation.get("composite_score", 0)
+            _save_tracker(tracker)
+            logger.info("Signal flipped back: %s BUY → WATCHLIST (score: %s)", ticker, recommendation.get("composite_score", 0))
         return
 
     quote = get_current_quote(ticker)
