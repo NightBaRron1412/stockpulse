@@ -240,7 +240,13 @@ def _generate_intraday_status(recommendations: list[dict], changes: list[dict]) 
             lines.append(f"## Changes: {len(tier_changes)} tier, {len(score_moves)} score, {len(approaching)} approaching")
             lines.append("")
             for c in changes:
-                lines.append(f"- **{c['ticker']}**: {c.get('thesis', '')[:100]}")
+                ctype = c.get("type", "")
+                if ctype == "action_change":
+                    lines.append(f"- **{c['ticker']}**: {c.get('previous_action', '?')} → {c.get('new_action', '?')} ({c.get('score_delta', 0):+.1f} pts). {c.get('thesis', '')[:80]}")
+                elif ctype == "score_movement":
+                    lines.append(f"- **{c['ticker']}**: {c.get('thesis', '')[:100]}")
+                elif ctype == "approaching_threshold":
+                    lines.append(f"- **{c['ticker']}**: {c.get('thesis', '')[:100]}")
             lines.append("")
         else:
             lines.append("**No signal changes**")
