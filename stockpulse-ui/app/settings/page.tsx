@@ -29,6 +29,8 @@ export default function SettingsPage() {
   const [editingThresholds, setEditingThresholds] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [editedSchedule, setEditedSchedule] = useState<Record<string, string> | null>(null);
+  const [editingAllocation, setEditingAllocation] = useState(false);
+  const [editedAllocation, setEditedAllocation] = useState<Record<string, string> | null>(null);
   const [editingRisk, setEditingRisk] = useState(false);
 
   const handleAdd = useCallback(async () => {
@@ -71,10 +73,18 @@ export default function SettingsPage() {
           update.scheduling[k] = isNaN(num) ? v : num;
         }
       }
+      if (editedAllocation) {
+        update.allocation = {};
+        for (const [k, v] of Object.entries(editedAllocation)) {
+          if (v === "true" || v === "false") update.allocation[k] = v === "true";
+          else { const num = Number(v); update.allocation[k] = isNaN(num) ? v : num; }
+        }
+      }
       await api.updateConfig(update);
       setEditedThresholds(null);
       setEditedRisk(null);
       setEditedSchedule(null);
+      setEditedAllocation(null);
       refresh();
     } finally { setSaving(false); }
   }, [editedThresholds, editedRisk, refresh]);
@@ -268,10 +278,25 @@ export default function SettingsPage() {
       {/* Allocation Rules */}
       {Object.keys(allocation).length > 0 && (
         <div className="glass-card p-6">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4">Allocation Rules</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-300">Allocation Rules</h2>
+            {!editingAllocation ? (
+              <Button variant="outline" size="sm" onClick={() => {
+                const vals: Record<string, string> = {};
+                for (const k of ["watchlist_starter_enabled","watchlist_starter_min_score","watchlist_starter_size","watchlist_starter_risk","max_watchlist_sleeve","max_watchlist_names","watchlist_exit_score","watchlist_timeout_days"]) {
+                  vals[k] = String(allocation[k] ?? "");
+                }
+                setEditingAllocation(vals);
+              }} className="h-7 text-xs border-slate-700">Edit</Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setEditingAllocation(null); }} className="h-7 text-xs border-slate-700">Cancel</Button>
+                <Button size="sm" onClick={() => { handleSaveConfig(); setEditingAllocation(false as any); }} disabled={saving} className="h-7 text-xs">Save</Button>
+              </div>
+            )}
+          </div>
 
-          {/* Editable sizing params */}
-          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Sizing & Limits <span className="text-blue-400 text-[10px] ml-1">Editable</span></h3>
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-3">Sizing & Limits</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
             {[
               { key: "watchlist_starter_enabled", label: "Starter Enabled", desc: "Allow WATCHLIST starter positions" },
@@ -285,9 +310,13 @@ export default function SettingsPage() {
             ].map(({ key, label, desc }) => (
               <div key={key} className="space-y-1">
                 <p className="cursor-help text-xs text-slate-400" title={desc}>{label}</p>
-                <p className="font-mono-data text-slate-200 text-sm">
-                  {allocation[key] != null ? (typeof allocation[key] === "boolean" ? (allocation[key] ? "Yes" : "No") : String(allocation[key])) : "--"}
-                </p>
+                {editingAllocation ? (
+                  <Input value={editingAllocation[key] ?? ""} onChange={(e) => setEditedAllocation({...editingAllocation, [key]: e.target.value})} className="bg-slate-800/50 border-slate-700/50 h-8 text-sm font-mono-data w-24" />
+                ) : (
+                  <p className="font-mono-data text-slate-200 text-sm">
+                    {allocation[key] != null ? (typeof allocation[key] === "boolean" ? (allocation[key] ? "Yes" : "No") : String(allocation[key])) : "--"}
+                  </p>
+                )}
               </div>
             ))}
           </div>
