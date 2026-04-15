@@ -72,7 +72,41 @@ def run_watchlist_scan(tickers: list[str], llm_tickers: set | None = None) -> li
             recommendations.append(rec)
         except Exception:
             logger.debug("Scan failed for %s", ticker)
-    return rank_recommendations(recommendations)
+    ranked = rank_recommendations(recommendations)
+
+    # Update the latest scan JSON with fresh results so watchlist UI stays current
+    _update_scan_json(ranked)
+
+    return ranked
+
+
+def _update_scan_json(new_recs: list[dict]) -> None:
+    """Merge intraday scan results into the latest scan JSON file."""
+    import json
+    from pathlib import Path
+    json_dir = Path(__file__).resolve().parent.parent.parent / "outputs" / "json"
+    if not json_dir.exists():
+        return
+    files = sorted(json_dir.glob("*.json"), reverse=True)
+    for f in files:
+        try:
+            with open(f) as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict) or "recommendations" not in data:
+                continue
+
+            # Merge: replace existing tickers with fresh data
+            existing = {r["ticker"]: r for r in data["recommendations"]}
+            for rec in new_recs:
+                clean = {k: v for k, v in rec.items() if k != "signals" or isinstance(v, dict)}
+                existing[rec["ticker"]] = clean
+            data["recommendations"] = list(existing.values())
+
+            with open(f, "w") as fh:
+                json.dump(data, fh, indent=2, default=str)
+            break
+        except Exception:
+            logger.debug("Failed to update scan JSON")
 
 
 def _update_discovered(ranked: list[dict]) -> None:
