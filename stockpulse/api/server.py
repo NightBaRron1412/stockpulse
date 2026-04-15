@@ -402,9 +402,11 @@ def _parse_wealthsimple_text(text: str) -> list[dict]:
             j += 1
 
         # Parse block: first $XXX is total value, first "N shares" is quantity
+        # Also extract return % to back-calculate real entry price
         total_value = None
         shares = None
         currency = "USD"
+        return_pct = None
 
         for bl in block_lines:
             # Value: "$134.47 USD" or "$2,323.80 CAD"
@@ -424,10 +426,26 @@ def _parse_wealthsimple_text(text: str) -> list[dict]:
                 oz = float(oz_match.group(1))
                 shares = round(oz * 10, 4)
 
+            # Return %: "-0.03%" or "+1.25%"
+            # Take the FIRST percentage that looks like a return (not price %)
+            ret_match = re.match(r'^([+-]?[0-9.]+)%$', bl)
+            if ret_match and return_pct is None:
+                return_pct = float(ret_match.group(1))
+
         if shares and shares > 0 and total_value and total_value > 0:
             if currency == "CAD":
                 total_value *= _get_cad_to_usd()
-            entry_price = round(total_value / shares, 2)
+            current_price = round(total_value / shares, 2)
+
+            # Back-calculate entry price from return %
+            # return_pct = ((current_value - invested) / invested) * 100
+            # invested = current_value / (1 + return_pct/100)
+            if return_pct is not None and abs(return_pct) > 0.001:
+                invested = total_value / (1 + return_pct / 100)
+                entry_price = round(invested / shares, 2)
+            else:
+                entry_price = current_price
+
             positions.append({
                 "ticker": ticker,
                 "shares": round(shares, 6),
