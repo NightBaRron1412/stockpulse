@@ -51,8 +51,13 @@ def run_full_scan(tickers: list[str] | None = None) -> list[dict]:
 
     return ranked
 
-def run_watchlist_scan(tickers: list[str]) -> list[dict]:
-    """Quick scan — no auto-discovery (only full scans discover new tickers)."""
+def run_watchlist_scan(tickers: list[str], llm_tickers: set | None = None) -> list[dict]:
+    """Quick scan — no auto-discovery (only full scans discover new tickers).
+
+    Args:
+        llm_tickers: Set of tickers that should use LLM news analysis.
+                     Others use keyword fallback for speed.
+    """
     if tickers is None:
         tickers = []
     logger.info("Watchlist scan of %d tickers", len(tickers))
@@ -62,7 +67,8 @@ def run_watchlist_scan(tickers: list[str]) -> list[dict]:
             df = get_price_history(ticker, period="1y")
             if df.empty or len(df) < 50:
                 continue
-            rec = generate_recommendation(ticker, df)
+            use_llm = llm_tickers is None or ticker in llm_tickers
+            rec = generate_recommendation(ticker, df, use_llm=use_llm)
             recommendations.append(rec)
         except Exception:
             logger.debug("Scan failed for %s", ticker)

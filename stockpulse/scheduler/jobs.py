@@ -30,13 +30,14 @@ def intraday_check_job():
     logger.info("--- Intraday check ---")
     try:
         wl = load_watchlists()
-        tickers = wl.get("user", []) + [
+        user_tickers = set(wl.get("user", []))
+        all_tickers = list(user_tickers | {
             item["ticker"] if isinstance(item, dict) else item
-            for item in wl.get("priority", [])]
-        tickers = list(set(tickers))
-        if not tickers:
+            for item in wl.get("priority", [])})
+        if not all_tickers:
             return
-        recommendations = run_watchlist_scan(tickers)
+        # Only use LLM news for user tickers (faster scan)
+        recommendations = run_watchlist_scan(all_tickers, llm_tickers=user_tickers)
         changes = detect_changes(recommendations)
         if changes:
             generate_intraday_report(changes)
