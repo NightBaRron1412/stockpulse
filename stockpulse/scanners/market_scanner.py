@@ -58,18 +58,29 @@ def run_watchlist_scan(tickers: list[str], llm_tickers: set | None = None) -> li
         llm_tickers: Set of tickers that should use LLM news analysis.
                      Others use keyword fallback for speed.
     """
+    import concurrent.futures
+
     if tickers is None:
         tickers = []
     logger.info("Watchlist scan of %d tickers", len(tickers))
     recommendations = []
+
+    def _scan_one(ticker):
+        df = get_price_history(ticker, period="1y")
+        if df.empty or len(df) < 50:
+            return None
+        use_llm = llm_tickers is None or ticker in llm_tickers
+        return generate_recommendation(ticker, df, use_llm=use_llm)
+
     for ticker in tickers:
         try:
-            df = get_price_history(ticker, period="1y")
-            if df.empty or len(df) < 50:
-                continue
-            use_llm = llm_tickers is None or ticker in llm_tickers
-            rec = generate_recommendation(ticker, df, use_llm=use_llm)
-            recommendations.append(rec)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_scan_one, ticker)
+                rec = future.result(timeout=30)  # 30s max per ticker
+                if rec:
+                    recommendations.append(rec)
+        except concurrent.futures.TimeoutError:
+            logger.warning("Scan timed out for %s (30s)", ticker)
         except Exception:
             logger.debug("Scan failed for %s", ticker)
     ranked = rank_recommendations(recommendations)
