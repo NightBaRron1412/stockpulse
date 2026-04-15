@@ -102,11 +102,30 @@ def generate_recommendation(ticker: str, df: pd.DataFrame, use_llm: bool = True)
     accel_bonus = compute_score_acceleration(ticker, composite, confirmation)
     composite += accel_bonus
 
-    # ---- PEAD overlay (event-driven, not weighted, applied after accel) ----
+    # ---- PEAD: post-earnings follow-through signal ----
+    # Pre-earnings = risk flag only (weight 0). Post-earnings = directional (5% weight)
+    # when EPS/revenue surprise agree, day-1 confirms, and RVOL is strong.
     pead_score = calc_pead_score(ticker)
     if abs(pead_score) > 5:
-        signals["pead"] = {"score": pead_score, "weight": 0.0, "value": pead_score}
-        composite += pead_score * 0.15
+        # PEAD calc already checks surprise agreement + day-1 + gap hold
+        # Use 5% weight for high-quality follow-through, 0 otherwise
+        pead_weight = 0.05 if abs(pead_score) >= 30 else 0.0
+        signals["pead"] = {"score": pead_score, "weight": pead_weight, "value": pead_score}
+        composite += pead_score * max(pead_weight, 0.03)  # minimum 3% overlay even for weak PEAD
+
+    # ---- Sector rotation overlay: +/- 4 points ----
+    try:
+        from stockpulse.signals.relative_strength import compute_sector_rotation_bonus
+        sector = ""
+        risk_data = signals.get("relative_strength", {})
+        if hasattr(risk_data, "get"):
+            sector = risk_data.get("sector", "")
+        sector_bonus = compute_sector_rotation_bonus(ticker, sector)
+        if sector_bonus != 0:
+            composite += sector_bonus
+            signals["sector_rotation"] = {"score": sector_bonus, "weight": 0.0, "value": sector_bonus}
+    except Exception:
+        pass
 
     # Re-classify with updated composite
     action = classify_action(composite)

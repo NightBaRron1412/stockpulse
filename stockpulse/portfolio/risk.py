@@ -271,7 +271,7 @@ def check_drawdown_status(
 ) -> dict:
     """Check portfolio drawdown and return trading restrictions.
 
-    Expert's rules:
+    Rules:
     - At -8%: cut new position sizes in half
     - At -12%: pause all new buys
     """

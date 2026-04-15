@@ -87,7 +87,7 @@ def calc_macd_signal(df: pd.DataFrame) -> float:
 
 def calc_ma_signal(df: pd.DataFrame) -> float:
     """Moving average signal split into price-location (60%) and structure/alignment (40%).
-    Expert: price above 20/50 should count even if alignment is bearish."""
+    Price above 20/50 should count even if alignment is bearish."""
     cfg = _get_signal_config("moving_averages")
     price_weight = cfg.get("price_vs_ma_weight", 0.60)
     stack_weight = cfg.get("stack_slope_weight", 0.40)
@@ -258,8 +258,14 @@ def calc_breakout_signal(df: pd.DataFrame) -> float:
     return _clamp(score)
 
 def calc_gap_signal(df: pd.DataFrame) -> float:
-    """Gap signal normalized by ATR and excess vs sector.
-    Expert: don't overreact to macro-driven gaps on volatile names."""
+    """Two-tier gap signal normalized by ATR.
+    Don't overreact to macro-driven gaps on volatile names.
+
+    Tiers:
+    - 0.20-0.30 ATR: info only, minimal score
+    - 0.30-0.50 ATR: normal scoreable gap
+    - > 0.50 ATR: strong gap signal
+    """
     cfg = _get_signal_config("gap")
     normalize_by_atr = cfg.get("normalize_by_atr", True)
 
@@ -272,22 +278,28 @@ def calc_gap_signal(df: pd.DataFrame) -> float:
 
     gap_pct = ((current_open - prev_close) / prev_close) * 100
 
-    if abs(gap_pct) < 0.3:
+    if abs(gap_pct) < 0.15:
         return 0.0
 
-    # Normalize by ATR% to avoid punishing volatile names
     if normalize_by_atr:
         atr = ta.atr(df["High"], df["Low"], df["Close"], length=14)
         if atr is not None and not atr.dropna().empty:
             atr_pct = (float(atr.iloc[-1]) / prev_close) * 100
             if atr_pct > 0:
-                # Gap as fraction of ATR: a gap that's < 0.5 ATR is noise
                 gap_atr_ratio = abs(gap_pct) / atr_pct
-                if gap_atr_ratio < 0.3:
-                    return 0.0  # gap is noise relative to volatility
-                # Scale: 0.5 ATR gap = mild, 1.0 ATR = moderate, 2.0 ATR = strong
-                score = (gap_pct / atr_pct) * 25
-                return _clamp(score, -60.0, 60.0)
+                direction = 1 if gap_pct > 0 else -1
+
+                if gap_atr_ratio < 0.20:
+                    return 0.0  # noise
+                elif gap_atr_ratio < 0.30:
+                    # Info tier: note it, minimal score
+                    return _clamp(direction * gap_atr_ratio * 10, -10.0, 10.0)
+                elif gap_atr_ratio < 0.50:
+                    # Normal scoreable gap
+                    return _clamp(direction * gap_atr_ratio * 25, -40.0, 40.0)
+                else:
+                    # Strong gap signal
+                    return _clamp(direction * gap_atr_ratio * 30, -60.0, 60.0)
 
     # Fallback: raw percentage scoring
     score = gap_pct * 20

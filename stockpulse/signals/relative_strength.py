@@ -207,3 +207,44 @@ def compute_universe_excess_returns(tickers: list[str]) -> dict:
 
     set_cached(cache_key, results)
     return results
+
+
+def compute_sector_rotation_bonus(ticker: str, sector: str = "") -> float:
+    """Sector rotation overlay: +/- 4 raw points based on sector momentum.
+
+    Strong sector (20d + 60d excess vs SPY both positive): +4
+    Neutral sector: 0
+    Weak sector (both negative): -4
+
+    Returns a raw point adjustment, not a [-100, +100] signal.
+    """
+    if not sector:
+        sector = _get_sector(ticker)
+
+    sector_etf = SECTOR_ETF.get(sector, "")
+    if not sector_etf:
+        return 0.0
+
+    try:
+        spy_df = get_price_history("SPY", period="6mo")
+        etf_df = get_price_history(sector_etf, period="6mo")
+
+        if spy_df.empty or etf_df.empty or len(spy_df) < 61 or len(etf_df) < 61:
+            return 0.0
+
+        r20_spy = _log_return(spy_df["Close"], 20)
+        r60_spy = _log_return(spy_df["Close"], 60)
+        r20_etf = _log_return(etf_df["Close"], 20)
+        r60_etf = _log_return(etf_df["Close"], 60)
+
+        ex20 = r20_etf - r20_spy
+        ex60 = r60_etf - r60_spy
+
+        if ex20 > 0.01 and ex60 > 0.01:
+            return 4.0   # strong sector
+        elif ex20 < -0.01 and ex60 < -0.01:
+            return -4.0  # weak sector
+        else:
+            return 0.0   # neutral
+    except Exception:
+        return 0.0

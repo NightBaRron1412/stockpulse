@@ -65,23 +65,37 @@ def detect_regime() -> dict:
         # VIX level
         vix_level = _get_vix()
 
-        # Determine regime
+        # Market breadth: % of S&P 500 above 200 SMA and 50 SMA
+        breadth_200 = _compute_breadth(200)
+        breadth_50 = _compute_breadth(50)
+
+        # Determine regime (breadth-aware model)
         vix_high = config.get("vix_high", 25)
         vix_extreme = config.get("vix_extreme", 35)
         correction_thresh = config.get("correction_threshold_pct", 5)
 
-        if price < sma200_val or vix_level >= vix_extreme:
+        # Regime model with breadth:
+        # Bullish: SPY > 200 SMA + EMA20 > SMA50 + breadth_200 >= 55%
+        # Risk-off: SPY < 200 SMA or breadth_200 <= 40% or VIX extreme
+        # Correcting: SPY < 50 SMA or drawdown > 5% or VIX high or breadth_200 < 55%
+        # Trending: bullish + ADX > 25
+
+        if price < sma200_val or breadth_200 <= 40 or vix_level >= vix_extreme:
             regime = "selling_off"
-            confidence = 90 if vix_level >= vix_extreme else 75
+            confidence = 90 if vix_level >= vix_extreme else 80 if breadth_200 <= 40 else 75
         elif price < sma50_val or spy_dd > correction_thresh or vix_level >= vix_high:
             regime = "correcting"
             confidence = 80 if spy_dd > correction_thresh else 65
-        elif price > ema20_val and ema20_val > sma50_val and adx_val > 25:
+        elif (price > ema20_val and ema20_val > sma50_val
+              and breadth_200 >= 55 and adx_val > 25):
             regime = "trending"
             confidence = min(90, int(50 + adx_val))
+        elif price > sma200_val and breadth_200 >= 55:
+            regime = "ranging"  # bullish but not trending
+            confidence = 65
         else:
             regime = "ranging"
-            confidence = 60
+            confidence = 55
 
         adjustment = get_regime_adjustments(regime, config)
 
@@ -95,6 +109,8 @@ def detect_regime() -> dict:
             "spy_rsi": round(rsi_val, 1),
             "spy_drawdown_pct": round(spy_dd, 1),
             "vix_level": round(vix_level, 1),
+            "breadth_200": round(breadth_200, 1),
+            "breadth_50": round(breadth_50, 1),
             "confidence": confidence,
             "adjustment": adjustment,
         }
@@ -118,6 +134,51 @@ def get_regime_adjustments(regime: str, config: dict | None = None) -> dict:
     }
 
     return adjustments.get(regime, defaults.get(regime, defaults["ranging"]))
+
+
+def _compute_breadth(sma_period: int = 200) -> float:
+    """Compute % of S&P 500 stocks above their N-day SMA.
+
+    Uses cached result to avoid re-computing on every call.
+    """
+    from stockpulse.data.cache import get_cached, set_cached
+
+    cache_key = f"breadth_{sma_period}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        from stockpulse.data.universe import get_sp500_tickers
+        from stockpulse.data.provider import bulk_download
+        import pandas_ta as _ta
+
+        tickers = get_sp500_tickers()
+        # Sample 100 tickers for speed (statistically representative)
+        import random
+        sample = random.sample(tickers, min(100, len(tickers)))
+
+        data = bulk_download(sample, period="1y")
+        above = 0
+        total = 0
+
+        for ticker in sample:
+            df = data.get(ticker)
+            if df is None or df.empty or len(df) < sma_period:
+                continue
+            close = df["Close"]
+            sma = _ta.sma(close, length=sma_period)
+            if sma is not None and not sma.dropna().empty:
+                total += 1
+                if float(close.iloc[-1]) > float(sma.iloc[-1]):
+                    above += 1
+
+        pct = (above / total * 100) if total > 0 else 50.0
+        set_cached(cache_key, pct)
+        return pct
+    except Exception:
+        logger.debug("Breadth computation failed, defaulting to 50%%")
+        return 50.0
 
 
 def _get_vix() -> float:

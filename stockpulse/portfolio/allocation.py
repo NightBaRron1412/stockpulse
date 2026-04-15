@@ -1,8 +1,8 @@
 """Shared allocation logic — used by both the allocator endpoint and the advisor.
 
 Extracts the qualifier checks and sizing functions so both paths
-use identical rules. The expert's principle: actionable suggestions
-must pass the same checks as the allocator.
+use identical rules. Actionable suggestions must pass the same
+checks as the allocator.
 """
 import logging
 
