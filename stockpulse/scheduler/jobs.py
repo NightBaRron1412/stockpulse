@@ -36,8 +36,7 @@ def intraday_check_job():
             for item in wl.get("priority", [])})
         if not all_tickers:
             return
-        # Only use LLM news for user tickers (faster scan)
-        recommendations = run_watchlist_scan(all_tickers, llm_tickers=user_tickers)
+        recommendations = run_watchlist_scan(all_tickers)
         changes = detect_changes(recommendations)
         if changes:
             generate_intraday_report(changes)
