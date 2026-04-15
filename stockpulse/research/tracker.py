@@ -61,8 +61,17 @@ def log_signal(recommendation: dict) -> None:
     ticker = recommendation["ticker"]
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # No duplicates on same day
-    if any(s["ticker"] == ticker and s["signal_date"] == today for s in tracker["signals"]):
+    # Check for existing entry on same day
+    existing = next((s for s in tracker["signals"] if s["ticker"] == ticker and s["signal_date"] == today), None)
+    if existing:
+        # Allow upgrade: WATCHLIST → BUY (update in place)
+        if existing["action"] == "WATCHLIST" and action == "BUY":
+            existing["action"] = "BUY"
+            existing["composite_score"] = recommendation.get("composite_score", 0)
+            existing["confidence"] = recommendation.get("confidence", 0)
+            existing["thesis"] = recommendation.get("thesis", "")[:200]
+            _save_tracker(tracker)
+            logger.info("Upgraded tracked signal: %s WATCHLIST → BUY", ticker)
         return
 
     quote = get_current_quote(ticker)
