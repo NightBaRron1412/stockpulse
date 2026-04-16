@@ -290,27 +290,26 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
     # VWAP/OR reclaim check
     reclaimed = current_price > vwap and current_price > or_low
 
-    # Volume on reclaim — compare last 3 bars vs mid-session bars (skip first 30 min spike)
-    # Opening bars often have 3-5x volume which makes reclaim bars look weak
+    # Time-of-day adjusted volume (BarRVOL_TOD)
+    # Compare current bar volume to median volume for this time slot over last 20 sessions
+    bar_rvol_tod, cum_rvol_tod = _compute_tod_volume(ticker, intraday)
     recent_vol = float(intraday["Volume"].iloc[-3:].mean()) if len(intraday) >= 3 else 0
-    mid_session = intraday["Volume"].iloc[6:]  # skip first 30 min (6 bars of 5m)
-    if len(mid_session) >= 5:
-        baseline_vol = float(mid_session.median())
-    else:
-        baseline_vol = float(intraday["Volume"].median())
-    avg_vol = baseline_vol if baseline_vol > 0 else float(intraday["Volume"].mean())
-    vol_mult = recent_vol / avg_vol if avg_vol > 0 else 1.0
-    vol_threshold = entry_cfg.get("reclaim_volume_multiple", 1.0)
-    vol_confirmed = vol_mult >= vol_threshold
+    vol_mult = bar_rvol_tod  # Use TOD-adjusted metric for display
+
+    # Cumulative RVOL — is the stock "in play" today?
+    cum_in_play = cum_rvol_tod >= 1.0
 
     # HARD REQUIREMENTS:
     # 1. Must have reclaimed VWAP/OR low
     # 2. Must have dipped enough
-    # 3. Volume not collapsing on reclaim (> 0.5x baseline = not dead)
+    # 3. Volume: reject if truly dead (TOD-adjusted)
     if not reclaimed:
         return None
-    if vol_mult < 0.4:
-        return None  # Volume completely dead — no real buying
+    if bar_rvol_tod < 0.5 and cum_rvol_tod < 1.0:
+        return None  # Dead volume — no participation at all
+
+    # Event override: big gap + high cumulative RVOL = in play regardless of reclaim bar
+    event_override = dip_pct >= 3.0 and cum_rvol_tod >= 2.0
 
     # Quality score (0-100)
     quality = 40  # Base: dip + reclaim
@@ -320,12 +319,17 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
         quality += 10
     if rsi_dipped:
         quality += 15  # RSI oversold bonus
-    if vol_confirmed:
-        quality += 20  # Strong volume bonus
-    elif vol_mult >= 0.7:
-        quality += 10  # Decent volume
-    if dip_pct >= 3.0 and reclaimed:
-        quality += 10  # Big dip reclaim is always notable
+    # Volume quality tiers (TOD-adjusted)
+    if bar_rvol_tod >= 1.2:
+        quality += 20  # Strong reclaim volume
+    elif bar_rvol_tod >= 0.9:
+        quality += 15  # Normal volume
+    elif bar_rvol_tod >= 0.5:
+        quality += 5   # Low but not dead
+    if event_override:
+        quality += 10  # Big gap + in play
+    if cum_in_play:
+        quality += 5   # Stock is in play today
 
     # Compute stop and target
     setup_low = day_low
@@ -367,8 +371,80 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
         "suggested_amount": round(shares * current_price, 2),
         "risk_dollars": round(shares * risk_per_share, 2),
         "reward_dollars": round(shares * risk_per_share * target_r, 2),
-        "setup": _describe_setup(dip_pct, rsi_dipped, reclaimed, vol_confirmed, vwap, or_low),
+        "setup": _describe_setup(dip_pct, rsi_dipped, reclaimed, bar_rvol_tod >= 1.0, vwap, or_low),
     }
+
+
+def _compute_tod_volume(ticker: str, intraday: pd.DataFrame) -> tuple[float, float]:
+    """Compute time-of-day adjusted volume metrics.
+
+    BarRVOL_TOD: current bar volume / median volume for this time slot over last 20 sessions
+    CumRVOL_TOD: cumulative volume today / median cumulative volume by this time over 20 sessions
+
+    Returns (bar_rvol_tod, cum_rvol_tod). Defaults to (1.0, 1.0) if historical data unavailable.
+    """
+    try:
+        import yfinance as yf
+
+        # Get last 20 sessions of 5-min data
+        cache_key = f"tod_vol_{ticker}"
+        hist_data = get_cached(cache_key)
+        if hist_data is None:
+            hist_data = yf.download(ticker, period="1mo", interval="5m", progress=False, timeout=15)
+            if isinstance(hist_data.columns, pd.MultiIndex):
+                hist_data.columns = hist_data.columns.get_level_values(0)
+            if not hist_data.empty:
+                set_cached(cache_key, hist_data)
+
+        if hist_data is None or hist_data.empty or len(hist_data) < 50:
+            return 1.0, 1.0
+
+        # Current time slot (hour:minute)
+        current_time = intraday.index[-1]
+        current_hour = current_time.hour if hasattr(current_time, 'hour') else 12
+        current_minute = (current_time.minute if hasattr(current_time, 'minute') else 0) // 5 * 5
+
+        # Get historical volumes for this time slot
+        tod_volumes = []
+        for idx, row in hist_data.iterrows():
+            h = idx.hour if hasattr(idx, 'hour') else 0
+            m = idx.minute if hasattr(idx, 'minute') else 0
+            if h == current_hour and (m // 5 * 5) == current_minute:
+                tod_volumes.append(float(row["Volume"]))
+
+        if len(tod_volumes) < 5:
+            # Fallback: use overall median
+            return 1.0, 1.0
+
+        # BarRVOL_TOD
+        current_bar_vol = float(intraday["Volume"].iloc[-1])
+        median_tod_vol = sorted(tod_volumes)[len(tod_volumes) // 2]
+        bar_rvol = current_bar_vol / median_tod_vol if median_tod_vol > 0 else 1.0
+
+        # CumRVOL_TOD
+        cum_vol_today = float(intraday["Volume"].sum())
+        # Estimate median cumulative volume by this time
+        bars_so_far = len(intraday)
+        daily_volumes = []
+        dates = set()
+        for idx in hist_data.index:
+            d = idx.date() if hasattr(idx, 'date') else idx
+            dates.add(d)
+        for d in sorted(dates)[-20:]:
+            day_mask = [idx.date() == d if hasattr(idx, 'date') else False for idx in hist_data.index]
+            day_data = hist_data[day_mask]
+            if len(day_data) >= bars_so_far:
+                daily_volumes.append(float(day_data["Volume"].iloc[:bars_so_far].sum()))
+
+        if daily_volumes:
+            median_cum = sorted(daily_volumes)[len(daily_volumes) // 2]
+            cum_rvol = cum_vol_today / median_cum if median_cum > 0 else 1.0
+        else:
+            cum_rvol = 1.0
+
+        return round(bar_rvol, 2), round(cum_rvol, 2)
+    except Exception:
+        return 1.0, 1.0
 
 
 def _describe_setup(dip_pct, rsi_dipped, reclaimed, vol_confirmed, vwap, or_low):
