@@ -93,6 +93,7 @@ def intraday_check_job():
         _generate_intraday_status(recommendations, changes)
 
         _run_advisor("intraday", recommendations)
+        _run_rebound_check()
     except Exception:
         logger.exception("Intraday check failed")
 
@@ -271,6 +272,76 @@ def _generate_intraday_status(recommendations: list[dict], changes: list[dict]) 
         logger.info("Intraday status report: %s", report_path)
     except Exception:
         logger.debug("Failed to generate intraday status report")
+
+
+def _run_rebound_check():
+    """Run rebound scan + check active trade exits. Sends Telegram alerts."""
+    try:
+        from stockpulse.config.settings import load_strategies
+        config = load_strategies().get("rebound_mode", {})
+        if not config.get("enabled", False):
+            return
+
+        # Check regime — disable in risk-off
+        if config.get("guardrails", {}).get("disable_in_risk_off", True):
+            try:
+                from stockpulse.signals.market_regime import detect_regime
+                regime = detect_regime()
+                if regime.get("regime") in ("selling_off", "correcting"):
+                    logger.info("Rebound: disabled in %s regime", regime["regime"])
+                    return
+            except Exception:
+                pass
+
+        # Check exit conditions on active trades
+        from stockpulse.portfolio.rebound import check_active_exits
+        exits = check_active_exits()
+        for alert in exits:
+            dispatch_alert({
+                "ticker": alert["ticker"],
+                "action": alert["action"],
+                "confidence": 90,
+                "thesis": alert["summary"],
+                "type": "rebound_exit",
+                "severity": alert.get("severity", "actionable"),
+                "technical_summary": "",
+                "catalyst_summary": "",
+                "invalidation": "",
+            })
+
+        # Scan for new candidates
+        from stockpulse.scanners.rebound_scanner import scan_rebound_candidates, get_eligible_tickers
+        eligible = get_eligible_tickers()
+        candidates = scan_rebound_candidates(eligible)
+
+        if candidates:
+            # Alert for top 1-2 candidates only
+            for c in candidates[:2]:
+                dispatch_alert({
+                    "ticker": c["ticker"],
+                    "action": "REBOUND",
+                    "confidence": c["quality"],
+                    "thesis": (
+                        f"Rebound setup: {c['ticker']} dipped {c['dip_pct']:.1f}%, "
+                        f"reclaimed VWAP ${c['vwap']:.2f}. "
+                        f"Entry ~${c['current_price']:.2f}, Stop ${c['stop_price']:.2f}, "
+                        f"Target ${c['target_price']:.2f}. "
+                        f"Risk ${c['risk_dollars']:.0f} / Reward ${c['reward_dollars']:.0f}."
+                    ),
+                    "type": "rebound_candidate",
+                    "severity": "actionable",
+                    "technical_summary": c["setup"],
+                    "catalyst_summary": "",
+                    "invalidation": f"Stop: ${c['stop_price']:.2f}",
+                })
+            logger.info("Rebound: %d candidates found, %d exits flagged", len(candidates), len(exits))
+        elif exits:
+            logger.info("Rebound: no new candidates, %d exits flagged", len(exits))
+        else:
+            logger.info("Rebound: no setups, no exits")
+
+    except Exception:
+        logger.exception("Rebound check failed")
 
 
 def _run_advisor(scan_trigger: str, recommendations: list[dict] | None = None):
