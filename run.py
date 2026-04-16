@@ -84,11 +84,51 @@ def run_scheduler():
     logging.info("StockPulse scheduler started with %d jobs:", len(scheduler.get_jobs()))
     for job in scheduler.get_jobs():
         logging.info("  - %s: %s", job.name, job.trigger)
+
+    # Catch-up: if morning scan was missed today, run it now
+    _catch_up_morning_scan(morning_time, tz)
+
     print("StockPulse scheduler is running. Press Ctrl+C to stop.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         logging.info("Scheduler stopped.")
+
+
+def _catch_up_morning_scan(morning_time: str, tz: str):
+    """If the morning scan was missed today (service started late), run it now."""
+    import threading
+    from datetime import datetime
+    try:
+        from pytz import timezone
+        now = datetime.now(timezone(tz))
+        h, m = map(int, morning_time.split(":"))
+
+        # Only catch up on weekdays, after the scheduled time, before EOD
+        if now.weekday() >= 5:  # Weekend
+            return
+        if now.hour < h or (now.hour == h and now.minute < m):
+            return  # Before scheduled time
+        if now.hour >= 16:
+            return  # After market close
+
+        # Check if a scan already ran today
+        log_path = Path(__file__).parent / "outputs" / "logs" / "stockpulse.log"
+        today_str = now.strftime("%Y-%m-%d")
+        if log_path.exists():
+            try:
+                for line in log_path.read_text().split("\n")[-200:]:
+                    if today_str in line and ("Morning scan complete" in line or "Scan complete" in line):
+                        logging.info("Morning scan already ran today, skipping catch-up")
+                        return
+            except Exception:
+                pass
+
+        logging.info("Morning scan was missed today (service started at %s). Running catch-up scan...", now.strftime("%H:%M"))
+        from stockpulse.scheduler.jobs import morning_scan_job
+        threading.Thread(target=morning_scan_job, daemon=True).start()
+    except Exception:
+        logging.exception("Catch-up scan check failed")
 
 def main():
     parser = argparse.ArgumentParser(description="StockPulse -- Stock Research & Alert System")
