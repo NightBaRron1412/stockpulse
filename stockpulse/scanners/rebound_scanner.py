@@ -271,3 +271,72 @@ def get_eligible_tickers() -> list[str]:
         eligible.append(ticker)
 
     return eligible
+
+
+def get_top_dippers(limit: int = 20) -> list[str]:
+    """Find today's biggest dippers from a broad universe — catches names outside the main scan.
+
+    Uses yfinance bulk download of a curated volatile-movers list + any user watchlist.
+    Returns tickers sorted by dip size.
+    """
+    from stockpulse.data.provider import bulk_download
+    from stockpulse.config.settings import load_watchlists
+    import pandas as pd
+
+    # Broad volatile universe: liquid large/mega caps + popular high-beta names
+    VOLATILE_UNIVERSE = [
+        # Mega-cap tech
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO", "AMD", "CRM",
+        # Semis
+        "MRVL", "QCOM", "INTC", "MU", "LRCX", "KLAC", "AMAT", "ON", "MCHP", "SNDK",
+        # High-beta / momentum
+        "COIN", "HOOD", "SOFI", "PLTR", "SNOW", "NET", "DDOG", "CRWD", "ZS", "PANW",
+        # Quantum / AI / speculative
+        "QBTS", "IONQ", "RGTI", "SMCI", "SOUN", "BBAI", "AI", "UPST",
+        # Energy / miners
+        "CLSK", "MARA", "RIOT", "HUT",
+        # Other liquid
+        "SQ", "SHOP", "ROKU", "SNAP", "PINS", "U", "RBLX", "TTD",
+    ]
+
+    # Add user watchlist
+    wl = load_watchlists()
+    user = wl.get("user", [])
+    tickers = list(dict.fromkeys(VOLATILE_UNIVERSE + user))
+
+    try:
+        data = bulk_download(tickers, period="5d")
+    except Exception:
+        return []
+
+    dippers = []
+    for ticker in tickers:
+        df = data.get(ticker)
+        if df is None or df.empty or len(df) < 2:
+            continue
+        try:
+            prev_close = float(df["Close"].iloc[-2])
+            today_open = float(df["Open"].iloc[-1])
+            today_low = float(df["Low"].iloc[-1])
+            today_close = float(df["Close"].iloc[-1])
+
+            # Dip from open or prev close
+            dip_from_open = ((today_open - today_low) / today_open) * 100 if today_open > 0 else 0
+            dip_from_prev = ((prev_close - today_low) / prev_close) * 100 if prev_close > 0 else 0
+            dip = max(dip_from_open, dip_from_prev)
+
+            # Must have bounced (current > low)
+            bounced = today_close > today_low * 1.003
+
+            # Min daily dollar volume ($50M+ for liquidity)
+            avg_vol = float(df["Volume"].iloc[-5:].mean()) if len(df) >= 5 else float(df["Volume"].mean())
+            avg_price = float(df["Close"].iloc[-5:].mean()) if len(df) >= 5 else float(df["Close"].mean())
+            dollar_vol = avg_vol * avg_price
+
+            if dip >= 1.0 and bounced and dollar_vol >= 50_000_000:
+                dippers.append((ticker, dip))
+        except Exception:
+            continue
+
+    dippers.sort(key=lambda x: x[1], reverse=True)
+    return [t for t, _ in dippers[:limit]]
