@@ -14,6 +14,9 @@ export default function ReboundPage() {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [closing, setClosing] = useState<string | null>(null);
   const [closePrice, setClosePrice] = useState("");
+  const [editingSleeve, setEditingSleeve] = useState(false);
+  const [sleeveInput, setSleeveInput] = useState("");
+  const [cashInput, setCashInput] = useState("");
 
   async function handleScan() {
     setScanning(true);
@@ -79,10 +82,39 @@ export default function ReboundPage() {
         <div className="glass-card p-4">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Sleeve</p>
           <p className="text-xl font-bold font-mono-data text-slate-200">${status?.sleeve_size?.toLocaleString() ?? "2,000"}</p>
+          {!editingSleeve && (
+            <button onClick={() => { setEditingSleeve(true); setSleeveInput(String(status?.sleeve_size ?? 2000)); setCashInput(String(status?.cash ?? 2000)); }}
+              className="text-[10px] text-blue-400 hover:text-blue-300 mt-1">Edit</button>
+          )}
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Cash</p>
           <p className="text-xl font-bold font-mono-data text-green-400">${status?.cash?.toLocaleString() ?? "2,000"}</p>
+          {editingSleeve && (
+            <div className="flex flex-col gap-1.5 mt-2">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-500 w-10">Sleeve</span>
+                <Input type="number" step={100} value={sleeveInput} onChange={(e) => setSleeveInput(e.target.value)}
+                  className="h-6 text-[10px] bg-slate-800/50 border-slate-700/50 w-20 font-mono-data" />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-500 w-10">Cash</span>
+                <Input type="number" step={100} value={cashInput} onChange={(e) => setCashInput(e.target.value)}
+                  className="h-6 text-[10px] bg-slate-800/50 border-slate-700/50 w-20 font-mono-data" />
+              </div>
+              <div className="flex gap-1">
+                <Button size="sm" className="h-5 text-[10px] px-2 bg-blue-600" onClick={async () => {
+                  await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"}/api/rebound/cash`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sleeve_size: parseFloat(sleeveInput), cash: parseFloat(cashInput) }),
+                  });
+                  setEditingSleeve(false);
+                  refreshStatus();
+                }}>Save</Button>
+                <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1" onClick={() => setEditingSleeve(false)}>X</Button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="glass-card p-4">
           <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Active</p>

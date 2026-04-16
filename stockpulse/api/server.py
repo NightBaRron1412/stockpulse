@@ -1239,6 +1239,18 @@ def rebound_exits():
     from stockpulse.portfolio.rebound import check_active_exits
     return check_active_exits()
 
+@app.post("/api/rebound/cash")
+def rebound_set_cash(data: dict):
+    """Set rebound sleeve cash and/or sleeve size."""
+    from stockpulse.portfolio.rebound import _load_state, _save_state
+    state = _load_state()
+    if "cash" in data:
+        state["cash"] = round(float(data["cash"]), 2)
+    if "sleeve_size" in data:
+        state["sleeve_size"] = round(float(data["sleeve_size"]), 2)
+    _save_state(state)
+    return {"status": "updated", "cash": state["cash"], "sleeve_size": state["sleeve_size"]}
+
 @app.get("/api/rebound/config")
 def rebound_config():
     from stockpulse.config.settings import load_strategies
