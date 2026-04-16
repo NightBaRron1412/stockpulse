@@ -18,11 +18,14 @@ export default function ReboundPage() {
   const [sleeveInput, setSleeveInput] = useState("");
   const [cashInput, setCashInput] = useState("");
 
+  const [activeDips, setActiveDips] = useState<any[]>([]);
+
   async function handleScan() {
     setScanning(true);
     try {
       const result = await api.reboundScan();
       setCandidates(result.candidates || []);
+      setActiveDips(result.active_dips || []);
     } finally {
       setScanning(false);
     }
@@ -200,7 +203,46 @@ export default function ReboundPage() {
         </div>
       )}
 
-      {/* Candidates */}
+      {/* Active Dips — stocks currently in the dip */}
+      {activeDips.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">
+            Active Dips — In Progress ({activeDips.length})
+          </h2>
+          {activeDips.map((dip: any) => (
+            <div key={dip.ticker} className="glass-card p-5 border-l-4 border-amber-500/50 bg-amber-500/5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-semibold text-slate-200">{dip.ticker}</p>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400 border border-red-500/25">
+                      DOWN {dip.dip_pct}%
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                      {dip.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-300/80 mt-1">{dip.alert}</p>
+                </div>
+                <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-white text-xs"
+                  onClick={() => handleOpen({...dip, quality: 0, setup: `Dip buy: ${dip.status} at $${dip.current_price}`})}>
+                  I Bought This
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs mt-3 py-2 px-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                <span className="font-mono-data">Now: <span className="text-red-400 font-medium">${dip.current_price}</span></span>
+                <span className="font-mono-data">VWAP: <span className="text-blue-400 font-medium">${dip.vwap}</span></span>
+                <span className="font-mono-data">Entry zone: <span className="text-green-400 font-medium">${dip.entry_zone}</span></span>
+                <span className="font-mono-data">Stop: <span className="text-red-400 font-medium">${dip.stop_price}</span></span>
+                <span className="font-mono-data">Target: <span className="text-blue-400 font-medium">${dip.target_price}</span></span>
+                <span className="font-mono-data text-slate-500">RSI: {dip.rsi} | Risk: ${dip.risk_dollars}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Confirmed Rebounds */}
       {candidates.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">

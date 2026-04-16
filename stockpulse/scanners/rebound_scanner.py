@@ -56,9 +56,156 @@ def scan_rebound_candidates(eligible_tickers: list[str]) -> list[dict]:
         except Exception:
             logger.debug("Rebound scan failed for %s", ticker)
 
-    # Sort by quality score (higher = better setup), return top 2 max
+    # Sort by quality score
     candidates.sort(key=lambda c: c.get("quality", 0), reverse=True)
-    return candidates[:5]  # Show top 5, user picks 1-2 to trade
+    return candidates[:5]
+
+
+def scan_active_dips(eligible_tickers: list[str]) -> list[dict]:
+    """Find stocks currently IN a dip — not yet bounced.
+
+    These are real-time alerts: "QBTS is down 5% and near VWAP — watch for entry."
+    The user decides when to buy based on their own confirmation.
+    """
+    config = load_strategies().get("rebound_mode", {})
+    if not config.get("enabled", False):
+        return []
+
+    entry_cfg = config.get("entry", {})
+    exit_cfg = config.get("exit", {})
+    sizing_cfg = config.get("sizing", {})
+
+    dips = []
+    for ticker in eligible_tickers:
+        try:
+            result = _check_active_dip(ticker, config)
+            if result:
+                dips.append(result)
+        except Exception:
+            pass
+
+    dips.sort(key=lambda d: d.get("dip_pct", 0), reverse=True)
+    return dips[:10]
+
+
+def _check_active_dip(ticker: str, config: dict) -> dict | None:
+    """Check if a ticker is currently in a dip — price below VWAP or OR low."""
+    import yfinance as yf
+    entry_cfg = config.get("entry", {})
+    exit_cfg = config.get("exit", {})
+    sizing_cfg = config.get("sizing", {})
+
+    # Get daily ATR
+    daily_df = get_price_history(ticker, period="3mo")
+    if daily_df.empty or len(daily_df) < 20:
+        return None
+    if isinstance(daily_df.columns, pd.MultiIndex):
+        daily_df.columns = daily_df.columns.get_level_values(0)
+
+    atr_series = ta.atr(daily_df["High"], daily_df["Low"], daily_df["Close"], length=14)
+    atr_val = float(atr_series.iloc[-1]) if atr_series is not None else 0
+    prev_close = float(daily_df["Close"].iloc[-1])
+
+    if atr_val <= 0 or prev_close <= 0:
+        return None
+
+    # Get intraday
+    cache_key = f"intraday_5m_{ticker}"
+    intraday = get_cached(cache_key)
+    if intraday is None:
+        try:
+            intraday = yf.download(ticker, period="1d", interval="5m", progress=False, timeout=10)
+            if isinstance(intraday.columns, pd.MultiIndex):
+                intraday.columns = intraday.columns.get_level_values(0)
+            if not intraday.empty:
+                set_cached(cache_key, intraday)
+        except Exception:
+            return None
+
+    if intraday is None or intraday.empty or len(intraday) < 6:
+        return None
+
+    open_price = float(intraday["Open"].iloc[0])
+    current_price = float(intraday["Close"].iloc[-1])
+    day_low = float(intraday["Low"].min())
+
+    # Opening range
+    or_high = float(intraday["High"].iloc[:6].max())
+    or_low = float(intraday["Low"].iloc[:6].min())
+
+    # VWAP
+    typical = (intraday["High"] + intraday["Low"] + intraday["Close"]) / 3
+    vol_sum = intraday["Volume"].cumsum()
+    vwap = float((typical * intraday["Volume"]).cumsum().iloc[-1] / vol_sum.iloc[-1]) if float(vol_sum.iloc[-1]) > 0 else current_price
+
+    # Dip check
+    dip_from_open = ((open_price - current_price) / open_price) * 100 if open_price > 0 else 0
+    dip_from_prev = ((prev_close - current_price) / prev_close) * 100 if prev_close > 0 else 0
+    dip_pct = max(dip_from_open, dip_from_prev)
+
+    dip_min = entry_cfg.get("dip_min_pct", 1.0)
+    if dip_pct < dip_min:
+        return None
+
+    # Must be BELOW vwap or near OR low — still in the dip
+    below_vwap = current_price <= vwap * 1.002
+    near_or_low = current_price <= or_low * 1.01
+
+    if not below_vwap and not near_or_low:
+        return None  # Already bounced — not an active dip
+
+    # RSI
+    rsi = ta.rsi(intraday["Close"], length=14)
+    rsi_current = 50.0
+    if rsi is not None:
+        clean = rsi.dropna()
+        if not clean.empty:
+            rsi_current = float(clean.iloc[-1])
+
+    # Compute levels
+    stop_pct = exit_cfg.get("stop_max_pct", 1.0) / 100
+    stop_price = round(current_price * (1 - stop_pct), 2)
+    risk_per_share = current_price - stop_price
+    target_r = exit_cfg.get("target_r", 1.3)
+    target_price = round(current_price + risk_per_share * target_r, 2)
+    entry_zone = round(max(vwap, or_low), 2)  # Buy near VWAP or OR low
+
+    # Sizing
+    max_risk = sizing_cfg.get("max_risk_per_trade", 20)
+    shares = int(max_risk / risk_per_share) if risk_per_share > 0 else 0
+    default_pos = sizing_cfg.get("default_position", 1500)
+    max_shares = int(default_pos / current_price) if current_price > 0 else 0
+    shares = min(shares, max_shares)
+
+    if shares <= 0:
+        return None
+
+    # Status
+    if current_price <= day_low * 1.005:
+        status = "AT LOW"
+    elif below_vwap:
+        status = "BELOW VWAP"
+    else:
+        status = "NEAR OR LOW"
+
+    return {
+        "ticker": ticker,
+        "status": status,
+        "dip_pct": round(dip_pct, 1),
+        "current_price": round(current_price, 2),
+        "open_price": round(open_price, 2),
+        "day_low": round(day_low, 2),
+        "vwap": round(vwap, 2),
+        "or_low": round(or_low, 2),
+        "or_high": round(or_high, 2),
+        "rsi": round(rsi_current, 1),
+        "entry_zone": entry_zone,
+        "stop_price": stop_price,
+        "target_price": target_price,
+        "suggested_shares": shares,
+        "risk_dollars": round(shares * risk_per_share, 2),
+        "alert": f"{ticker} DOWN {dip_pct:.1f}% — {status} at ${current_price:.2f}. VWAP ${vwap:.2f}. Watch for reclaim.",
+    }
 
 
 def _check_rebound_setup(ticker: str, config: dict) -> dict | None:

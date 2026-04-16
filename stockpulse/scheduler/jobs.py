@@ -322,36 +322,57 @@ def _run_rebound_check():
                 "invalidation": "",
             })
 
-        # Scan for new candidates
-        from stockpulse.scanners.rebound_scanner import scan_rebound_candidates, get_eligible_tickers
+        # Scan for new candidates + active dips
+        from stockpulse.scanners.rebound_scanner import (
+            scan_rebound_candidates, scan_active_dips, get_eligible_tickers, get_top_dippers,
+        )
         eligible = get_eligible_tickers()
-        candidates = scan_rebound_candidates(eligible)
+        dippers = get_top_dippers()
+        combined = list(dict.fromkeys(eligible + dippers))
 
-        if candidates:
-            # Alert for top 1-2 candidates only
-            for c in candidates[:2]:
-                dispatch_alert({
-                    "ticker": c["ticker"],
-                    "action": "REBOUND",
-                    "confidence": c["quality"],
-                    "thesis": (
-                        f"Rebound setup: {c['ticker']} dipped {c['dip_pct']:.1f}%, "
-                        f"reclaimed VWAP ${c['vwap']:.2f}. "
-                        f"Entry ~${c['current_price']:.2f}, Stop ${c['stop_price']:.2f}, "
-                        f"Target ${c['target_price']:.2f}. "
-                        f"Risk ${c['risk_dollars']:.0f} / Reward ${c['reward_dollars']:.0f}."
-                    ),
-                    "type": "rebound_candidate",
-                    "severity": "actionable",
-                    "technical_summary": c["setup"],
-                    "catalyst_summary": "",
-                    "invalidation": f"Stop: ${c['stop_price']:.2f}",
-                })
-            logger.info("Rebound: %d candidates found, %d exits flagged", len(candidates), len(exits))
-        elif exits:
-            logger.info("Rebound: no new candidates, %d exits flagged", len(exits))
-        else:
-            logger.info("Rebound: no setups, no exits")
+        candidates = scan_rebound_candidates(combined)
+        active_dips = scan_active_dips(combined)
+
+        # Alert for active dips — stocks CURRENTLY in the dip (not yet bounced)
+        for dip in active_dips[:3]:
+            dispatch_alert({
+                "ticker": dip["ticker"],
+                "action": "DIP",
+                "confidence": 70,
+                "thesis": dip["alert"],
+                "type": "rebound_dip_alert",
+                "severity": "actionable",
+                "technical_summary": (
+                    f"Entry zone: ${dip['entry_zone']:.2f} | "
+                    f"Stop: ${dip['stop_price']:.2f} | "
+                    f"Target: ${dip['target_price']:.2f} | "
+                    f"RSI: {dip['rsi']:.0f}"
+                ),
+                "catalyst_summary": "",
+                "invalidation": f"Stop: ${dip['stop_price']:.2f}",
+            })
+
+        # Alert for confirmed rebounds
+        for c in candidates[:2]:
+            dispatch_alert({
+                "ticker": c["ticker"],
+                "action": "REBOUND",
+                "confidence": c["quality"],
+                "thesis": (
+                    f"Rebound confirmed: {c['ticker']} dipped {c['dip_pct']:.1f}%, "
+                    f"reclaimed VWAP ${c['vwap']:.2f}. "
+                    f"Entry ~${c['current_price']:.2f}, Stop ${c['stop_price']:.2f}, "
+                    f"Target ${c['target_price']:.2f}."
+                ),
+                "type": "rebound_candidate",
+                "severity": "actionable",
+                "technical_summary": c["setup"],
+                "catalyst_summary": "",
+                "invalidation": f"Stop: ${c['stop_price']:.2f}",
+            })
+
+        total_alerts = len(active_dips) + len(candidates) + len(exits)
+        logger.info("Rebound: %d dips, %d candidates, %d exits", len(active_dips), len(candidates), len(exits))
 
     except Exception:
         logger.exception("Rebound check failed")

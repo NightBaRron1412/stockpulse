@@ -1218,13 +1218,13 @@ def get_advisor_config():
 
 @app.get("/api/rebound/scan")
 def scan_rebound():
-    from stockpulse.scanners.rebound_scanner import scan_rebound_candidates, get_eligible_tickers, get_top_dippers
-    # Combine main engine eligible + top dippers from broad universe
+    from stockpulse.scanners.rebound_scanner import scan_rebound_candidates, scan_active_dips, get_eligible_tickers, get_top_dippers
     eligible = get_eligible_tickers()
     dippers = get_top_dippers()
     combined = list(dict.fromkeys(eligible + dippers))
     candidates = scan_rebound_candidates(combined)
-    return {"eligible_count": len(combined), "candidates": candidates}
+    active_dips = scan_active_dips(combined)
+    return {"eligible_count": len(combined), "candidates": candidates, "active_dips": active_dips}
 
 @app.get("/api/rebound/status")
 def rebound_status():
