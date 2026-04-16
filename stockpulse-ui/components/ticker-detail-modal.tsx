@@ -322,7 +322,7 @@ function TradingViewChart({ ticker }: { ticker: string }) {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex gap-1 pb-1.5">
+      <div className="flex gap-1 px-2 pt-1 pb-1">
         {[
           { label: "5m", value: "5" },
           { label: "15m", value: "15" },
@@ -340,7 +340,7 @@ function TradingViewChart({ ticker }: { ticker: string }) {
           </button>
         ))}
       </div>
-      <div className="flex-1" ref={containerRef} />
+      <div className="flex-1 min-h-[300px]" ref={containerRef} />
     </div>
   );
 }
