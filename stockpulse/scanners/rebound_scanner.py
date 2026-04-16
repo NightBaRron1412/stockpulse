@@ -58,8 +58,7 @@ def scan_rebound_candidates(eligible_tickers: list[str]) -> list[dict]:
 
     # Sort by quality score (higher = better setup), return top 2 max
     candidates.sort(key=lambda c: c.get("quality", 0), reverse=True)
-    max_candidates = config.get("sizing", {}).get("max_positions", 1) + 1  # show 1 extra as backup
-    return candidates[:max(2, max_candidates)]
+    return candidates[:5]  # Show top 5, user picks 1-2 to trade
 
 
 def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
@@ -144,32 +143,42 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
     # VWAP/OR reclaim check
     reclaimed = current_price > vwap and current_price > or_low
 
-    # Volume on reclaim — compare last 3 bars vs median of non-spike bars
-    # (using median excludes the opening spike that inflates the average)
+    # Volume on reclaim — compare last 3 bars vs mid-session bars (skip first 30 min spike)
+    # Opening bars often have 3-5x volume which makes reclaim bars look weak
     recent_vol = float(intraday["Volume"].iloc[-3:].mean()) if len(intraday) >= 3 else 0
-    median_vol = float(intraday["Volume"].median())
-    avg_vol = median_vol if median_vol > 0 else float(intraday["Volume"].mean())
+    mid_session = intraday["Volume"].iloc[6:]  # skip first 30 min (6 bars of 5m)
+    if len(mid_session) >= 5:
+        baseline_vol = float(mid_session.median())
+    else:
+        baseline_vol = float(intraday["Volume"].median())
+    avg_vol = baseline_vol if baseline_vol > 0 else float(intraday["Volume"].mean())
     vol_mult = recent_vol / avg_vol if avg_vol > 0 else 1.0
-    vol_threshold = entry_cfg.get("reclaim_volume_multiple", 1.5)
+    vol_threshold = entry_cfg.get("reclaim_volume_multiple", 1.0)
     vol_confirmed = vol_mult >= vol_threshold
 
-    # HARD REQUIREMENTS (expert rules):
+    # HARD REQUIREMENTS:
     # 1. Must have reclaimed VWAP/OR low
     # 2. Must have dipped enough
-    # 3. Volume confirmation on reclaim required
+    # 3. Volume not collapsing on reclaim (> 0.5x baseline = not dead)
     if not reclaimed:
         return None
-    if not vol_confirmed:
-        return None
+    if vol_mult < 0.4:
+        return None  # Volume completely dead — no real buying
 
-    # Quality score (0-100) — bonus signals
-    quality = 50  # Base: reclaimed + volume confirmed
-    if dip_pct >= dip_min_pct * 1.5:
+    # Quality score (0-100)
+    quality = 40  # Base: dip + reclaim
+    if dip_pct >= dip_min_pct * 2:
         quality += 15  # Deep dip bonus
+    elif dip_pct >= dip_min_pct * 1.5:
+        quality += 10
     if rsi_dipped:
-        quality += 20  # RSI oversold bonus
-    if vol_mult >= vol_threshold * 1.5:
-        quality += 15  # Strong volume bonus
+        quality += 15  # RSI oversold bonus
+    if vol_confirmed:
+        quality += 20  # Strong volume bonus
+    elif vol_mult >= 0.7:
+        quality += 10  # Decent volume
+    if dip_pct >= 3.0 and reclaimed:
+        quality += 10  # Big dip reclaim is always notable
 
     # Compute stop and target
     setup_low = day_low
