@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,16 @@ export default function ReboundPage() {
   const [cashInput, setCashInput] = useState("");
 
   const [activeDips, setActiveDips] = useState<any[]>([]);
+  const [scanTime, setScanTime] = useState<string | null>(null);
+
+  // Load last scan results on mount
+  useEffect(() => {
+    api.reboundLatest().then((result) => {
+      setCandidates(result.candidates || []);
+      setActiveDips(result.active_dips || []);
+      setScanTime(result.scan_time || null);
+    }).catch(() => {});
+  }, []);
 
   async function handleScan() {
     setScanning(true);
@@ -27,6 +37,7 @@ export default function ReboundPage() {
       const result = await api.reboundScan();
       setCandidates(result.candidates || []);
       setActiveDips(result.active_dips || []);
+      setScanTime(result.scan_time || null);
     } finally {
       setScanning(false);
     }
@@ -73,7 +84,10 @@ export default function ReboundPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Rebound-2D</h1>
-          <p className="text-xs text-slate-500 mt-1">Intraday dip-buy sleeve | 1-2 day hold | Manual execution</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Intraday dip-buy sleeve | 1-2 day hold | Manual execution
+            {scanTime && <span className="ml-2 text-slate-600">Last scan: {new Date(scanTime).toLocaleTimeString()}</span>}
+          </p>
         </div>
         <Button onClick={handleScan} disabled={scanning}
           className="bg-blue-600 hover:bg-blue-500 text-white font-medium px-5">

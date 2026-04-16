@@ -65,6 +65,7 @@ export const api = {
     }),
   advisorConfig: () => fetcher<any>("/api/advisor/config"),
   reboundScan: () => fetcher<any>("/api/rebound/scan"),
+  reboundLatest: () => fetcher<any>("/api/rebound/latest"),
   reboundStatus: () => fetcher<any>("/api/rebound/status"),
   reboundOpen: (data: { ticker: string; shares: number; entry_price: number; stop_price: number; target_price: number; setup?: string }) =>
     fetcher<any>("/api/rebound/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),

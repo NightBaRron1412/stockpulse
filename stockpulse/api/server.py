@@ -1216,15 +1216,26 @@ def get_advisor_config():
 # Rebound-2D Mode
 # ═══════════════════════════════════════════════════
 
+_last_rebound_scan: dict = {"candidates": [], "active_dips": [], "eligible_count": 0, "scan_time": None}
+
 @app.get("/api/rebound/scan")
 def scan_rebound():
     from stockpulse.scanners.rebound_scanner import scan_rebound_candidates, scan_active_dips, get_eligible_tickers, get_top_dippers
+    from datetime import datetime
     eligible = get_eligible_tickers()
     dippers = get_top_dippers()
     combined = list(dict.fromkeys(eligible + dippers))
     candidates = scan_rebound_candidates(combined)
     active_dips = scan_active_dips(combined)
-    return {"eligible_count": len(combined), "candidates": candidates, "active_dips": active_dips}
+    _last_rebound_scan["candidates"] = candidates
+    _last_rebound_scan["active_dips"] = active_dips
+    _last_rebound_scan["eligible_count"] = len(combined)
+    _last_rebound_scan["scan_time"] = datetime.now().isoformat()
+    return _last_rebound_scan
+
+@app.get("/api/rebound/latest")
+def rebound_latest():
+    return _last_rebound_scan
 
 @app.get("/api/rebound/status")
 def rebound_status():
