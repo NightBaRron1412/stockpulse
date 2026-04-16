@@ -427,10 +427,10 @@ def get_eligible_tickers() -> list[str]:
         eligible.append(ticker)
 
     # Apply Shariah filter (user tickers bypass)
-    from stockpulse.config.settings import load_strategies as _ls
+    from stockpulse.config.settings import load_strategies as _ls, load_watchlists as _lw
     if _ls().get("filters", {}).get("shariah_only", False):
         from stockpulse.filters.shariah import is_compliant_fast
-        user_set = set(wl.get("user", []))
+        user_set = set(_lw().get("user", []))
         eligible = [t for t in eligible if t in user_set or is_compliant_fast(t)]
 
     return eligible
