@@ -426,6 +426,13 @@ def get_eligible_tickers() -> list[str]:
 
         eligible.append(ticker)
 
+    # Apply Shariah filter (user tickers bypass)
+    from stockpulse.config.settings import load_strategies as _ls
+    if _ls().get("filters", {}).get("shariah_only", False):
+        from stockpulse.filters.shariah import is_compliant_fast
+        user_set = set(wl.get("user", []))
+        eligible = [t for t in eligible if t in user_set or is_compliant_fast(t)]
+
     return eligible
 
 
@@ -486,4 +493,13 @@ def get_top_dippers(limit: int = 20) -> list[str]:
             continue
 
     dippers.sort(key=lambda x: x[1], reverse=True)
-    return [t for t, _ in dippers[:limit]]
+    result = [t for t, _ in dippers[:limit]]
+
+    # Apply Shariah filter (user tickers bypass)
+    from stockpulse.config.settings import load_strategies as _ls
+    if _ls().get("filters", {}).get("shariah_only", False):
+        from stockpulse.filters.shariah import is_compliant_fast
+        user_set = set(load_watchlists().get("user", []))
+        result = [t for t in result if t in user_set or is_compliant_fast(t)]
+
+    return result
