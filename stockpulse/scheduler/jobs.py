@@ -8,8 +8,17 @@ from stockpulse.alerts.dispatcher import dispatch_recommendations, dispatch_aler
 
 logger = logging.getLogger(__name__)
 
+def _is_day_trading_focus() -> bool:
+    from stockpulse.config.settings import load_strategies
+    return load_strategies().get("rebound_mode", {}).get("day_trading_focus", False)
+
+
 def morning_scan_job():
     logger.info("=== MORNING SCAN START ===")
+    if _is_day_trading_focus():
+        logger.info("Day trading focus mode — skipping morning position scan, running rebound scan only")
+        _run_rebound_check()
+        return
     try:
         recommendations = run_full_scan()
         report_path = generate_morning_report(recommendations)
@@ -28,6 +37,10 @@ def morning_scan_job():
 
 def intraday_check_job():
     logger.info("--- Intraday check ---")
+    if _is_day_trading_focus():
+        logger.info("Day trading focus — rebound scan only")
+        _run_rebound_check()
+        return
     try:
         wl = load_watchlists()
         user_tickers = set(wl.get("user", []))

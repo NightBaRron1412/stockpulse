@@ -28,7 +28,7 @@ export const api = {
   removeFromWatchlist: (ticker: string) => fetcher<any>("/api/watchlist/remove", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker }),
   }),
-  updateConfig: (data: { thresholds?: Record<string, number>; risk?: Record<string, number> }) =>
+  updateConfig: (data: Record<string, any>) =>
     fetcher<any>("/api/config/update", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
     }),

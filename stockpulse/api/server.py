@@ -1150,6 +1150,16 @@ def update_config(data: dict):
                     mr[key][subkey] = subval
             else:
                 mr[key] = val
+    if "rebound_mode" in data:
+        if "rebound_mode" not in strat:
+            strat["rebound_mode"] = {}
+        rm = strat["rebound_mode"]
+        for key, val in data["rebound_mode"].items():
+            if isinstance(val, dict) and isinstance(rm.get(key), dict):
+                for subkey, subval in val.items():
+                    rm[key][subkey] = subval
+            else:
+                rm[key] = val
     if "backtesting" in data:
         if "backtesting" not in strat:
             strat["backtesting"] = {}

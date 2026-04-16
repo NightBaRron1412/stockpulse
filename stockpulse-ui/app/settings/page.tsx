@@ -870,6 +870,17 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
               <div className="flex justify-between py-1"><span className="text-slate-500">Enabled</span><span className={cn("font-mono-data", rb.enabled ? "text-green-400" : "text-slate-500")}>{rb.enabled ? "Yes" : "No"}</span></div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500">Day Trading Focus</span>
+                <button onClick={async () => {
+                  await api.updateConfig({ rebound_mode: { day_trading_focus: !rb.day_trading_focus } });
+                  refresh();
+                }} className={cn("font-mono-data text-xs px-2 py-0.5 rounded border",
+                  rb.day_trading_focus
+                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                    : "text-slate-500 border-slate-700/30 hover:text-slate-300"
+                )}>{rb.day_trading_focus ? "ON — position scans paused" : "OFF"}</button>
+              </div>
               <div className="flex justify-between py-1"><span className="text-slate-500">Sleeve Size</span><span className="font-mono-data text-slate-300">${rb.sleeve_size?.toLocaleString()}</span></div>
               <div className="flex justify-between py-1"><span className="text-slate-500">Manual Exec</span><span className={cn("font-mono-data", rb.manual_execution ? "text-green-400" : "text-slate-500")}>{rb.manual_execution ? "Yes" : "No"}</span></div>
             </div>

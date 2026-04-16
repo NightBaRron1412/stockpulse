@@ -219,6 +219,7 @@ market_regime:
       starter_enabled: false
 rebound_mode:
   enabled: true
+  day_trading_focus: false
   sleeve_size: 2000
   separate_pnl: true
   manual_execution: true
