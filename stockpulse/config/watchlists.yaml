@@ -1,38 +1,24 @@
 discovered:
 - ANET
 - AVGO
-- CAT
 - CIEN
-- CMI
 - COHR
 - DLR
-- EBAY
-- EME
 - EQIX
-- ETN
 - FCX
 - FIX
 - GEV
 - GLW
-- GOOG
 - GRMN
-- HLT
 - HOOD
-- HUBB
 - INTC
-- JBHT
 - JBL
-- KLAC
 - LITE
-- LRCX
 - MPWR
 - NFLX
 - 'ON'
-- PSA
 - STX
-- TEL
 - TER
-- VRT
 - WDC
 priority:
 - action: WATCHLIST
@@ -117,23 +103,8 @@ priority:
   score: 25.2
   ticker: LITE
 - action: HOLD
-  score: 24.9
-  ticker: LRCX
-- action: HOLD
-  score: 24.2
-  ticker: HLT
-- action: HOLD
   score: 23.4
   ticker: GOOGL
-- action: HOLD
-  score: 22.6
-  ticker: VRT
-- action: HOLD
-  score: 22.3
-  ticker: GOOG
-- action: HOLD
-  score: 22.1
-  ticker: KLAC
 - action: HOLD
   score: 20.1
   ticker: AMZN
@@ -144,38 +115,17 @@ priority:
   score: 19.3
   ticker: SPUS
 - action: HOLD
-  score: 18.2
-  ticker: CAT
-- action: HOLD
   score: -18.1
   ticker: DT
 - action: HOLD
   score: 17.8
   ticker: META
 - action: HOLD
-  score: 17.6
-  ticker: TEL
-- action: HOLD
-  score: 17.1
-  ticker: EME
-- action: HOLD
   score: -14.7
   ticker: NOW
 - action: HOLD
   score: 14.5
-  ticker: EBAY
-- action: HOLD
-  score: 14.5
   ticker: SPWO
-- action: HOLD
-  score: 14.1
-  ticker: HUBB
-- action: HOLD
-  score: 13.8
-  ticker: ETN
-- action: HOLD
-  score: 13.6
-  ticker: PSA
 - action: HOLD
   score: -12.2
   ticker: TMC
@@ -183,14 +133,8 @@ priority:
   score: 10.6
   ticker: MSFT
 - action: HOLD
-  score: 9.0
-  ticker: CMI
-- action: HOLD
   score: 8.5
   ticker: CLSK
-- action: HOLD
-  score: 5.7
-  ticker: JBHT
 - action: HOLD
   score: 5.2
   ticker: TSLA

@@ -33,7 +33,7 @@ export function TickerLink({
   return (
     <button
       onClick={(e) => { e.stopPropagation(); open(ticker); }}
-      className={className ?? "font-semibold hover:text-blue-400 transition-colors hover:underline underline-offset-2"}
+      className={`font-semibold hover:text-blue-400 transition-colors hover:underline underline-offset-2 ${className ?? ""}`}
     >
       {children ?? ticker}
     </button>
