@@ -287,8 +287,17 @@ def _generate_intraday_status(recommendations: list[dict], changes: list[dict]) 
         logger.debug("Failed to generate intraday status report")
 
 
+def rebound_scan_job():
+    """Dedicated fast rebound scan — runs every 10 min, separate from intraday position scan."""
+    logger.info("--- Rebound dip scan ---")
+    _run_rebound_check()
+
+
+_rebound_alerted: dict[str, float] = {}  # {ticker: timestamp} — dedup alerts within 30 min
+
 def _run_rebound_check():
     """Run rebound scan + check active trade exits. Sends Telegram alerts."""
+    import time
     try:
         from stockpulse.config.settings import load_strategies
         config = load_strategies().get("rebound_mode", {})
@@ -333,8 +342,17 @@ def _run_rebound_check():
         candidates = scan_rebound_candidates(combined)
         active_dips = scan_active_dips(combined)
 
-        # Alert for active dips — stocks CURRENTLY in the dip (not yet bounced)
+        # Alert for active dips — dedup within 30 min to avoid spam
+        now = time.time()
+        # Clean old entries
+        for t in list(_rebound_alerted.keys()):
+            if now - _rebound_alerted[t] > 1800:  # 30 min
+                del _rebound_alerted[t]
+
         for dip in active_dips[:3]:
+            if dip["ticker"] in _rebound_alerted:
+                continue  # Already alerted recently
+            _rebound_alerted[dip["ticker"]] = now
             dispatch_alert({
                 "ticker": dip["ticker"],
                 "action": "DIP",

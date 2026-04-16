@@ -121,6 +121,7 @@ scheduling:
   intraday_interval_minutes: 30
   eod_recap: '16:30'
   sec_scan_interval_hours: 2
+  rebound_scan_interval_minutes: 10
   timezone: US/Eastern
 backtesting:
   max_positions: 8

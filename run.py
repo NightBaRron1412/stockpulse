@@ -48,6 +48,12 @@ def run_scheduler():
     interval_min = sched_cfg.get("intraday_interval_minutes", 30)
     scheduler.add_job(intraday_check_job, CronTrigger(minute=f"*/{interval_min}", hour="9-16",
         day_of_week="mon-fri", timezone=tz), id="intraday_check", name="Intraday Check")
+    # Fast rebound scan every 10 min (separate from intraday position check)
+    from stockpulse.scheduler.jobs import rebound_scan_job
+    rebound_interval = sched_cfg.get("rebound_scan_interval_minutes", 10)
+    scheduler.add_job(rebound_scan_job, CronTrigger(minute=f"*/{rebound_interval}", hour="10-15",
+        day_of_week="mon-fri", timezone=tz), id="rebound_scan", name="Rebound Dip Scan")
+
     eod_time = sched_cfg.get("eod_recap", "16:30")
     h, m = eod_time.split(":")
     scheduler.add_job(eod_recap_job, CronTrigger(hour=int(h), minute=int(m), day_of_week="mon-fri", timezone=tz),
