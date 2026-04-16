@@ -237,7 +237,7 @@ rebound_mode:
     dip_min_atr_fraction: 0.35
     intraday_rsi_max: 35
     require_vwap_reclaim: true
-    reclaim_volume_multiple: 1.5
+    reclaim_volume_multiple: 1.0
   exit:
     stop_max_pct: 1.0
     stop_max_atr_fraction: 0.35
