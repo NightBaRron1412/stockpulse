@@ -144,9 +144,11 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
     # VWAP/OR reclaim check
     reclaimed = current_price > vwap and current_price > or_low
 
-    # Volume on reclaim (last 3 bars vs session average)
+    # Volume on reclaim — compare last 3 bars vs median of non-spike bars
+    # (using median excludes the opening spike that inflates the average)
     recent_vol = float(intraday["Volume"].iloc[-3:].mean()) if len(intraday) >= 3 else 0
-    avg_vol = float(intraday["Volume"].mean())
+    median_vol = float(intraday["Volume"].median())
+    avg_vol = median_vol if median_vol > 0 else float(intraday["Volume"].mean())
     vol_mult = recent_vol / avg_vol if avg_vol > 0 else 1.0
     vol_threshold = entry_cfg.get("reclaim_volume_multiple", 1.5)
     vol_confirmed = vol_mult >= vol_threshold
