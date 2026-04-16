@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TickerLink } from "@/components/ticker-link";
 
 export default function ReboundPage() {
   const { data: status, refresh: refreshStatus } = usePolling<any>(api.reboundStatus, 30000);
@@ -172,7 +173,7 @@ export default function ReboundPage() {
             <div key={trade.ticker} className="glass-card p-5 border-l-4 border-blue-500/50">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-lg font-semibold text-slate-200">{trade.ticker}</p>
+                  <TickerLink ticker={trade.ticker} className="text-lg" />
                   <p className="text-xs text-slate-400">{trade.setup}</p>
                 </div>
                 <div className="flex gap-2">
@@ -214,7 +215,7 @@ export default function ReboundPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-lg font-semibold text-slate-200">{dip.ticker}</p>
+                    <TickerLink ticker={dip.ticker} className="text-lg" />
                     <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400 border border-red-500/25">
                       DOWN {dip.dip_pct}%
                     </span>
@@ -253,7 +254,7 @@ export default function ReboundPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-lg font-semibold text-slate-200">{c.ticker}</p>
+                    <TickerLink ticker={c.ticker} className="text-lg" />
                     <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-500/15 text-green-400 border border-green-500/25">
                       Quality: {c.quality}/100
                     </span>
