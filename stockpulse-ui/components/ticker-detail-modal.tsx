@@ -281,11 +281,11 @@ export function TickerDetailModal({ ticker, onClose }: TickerDetailModalProps) {
 
 function TradingViewChart({ ticker }: { ticker: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [interval, setInterval_] = useState("D");
 
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    // Clear previous widget
     while (container.firstChild) container.removeChild(container.firstChild);
 
     const widgetDiv = document.createElement("div");
@@ -301,7 +301,7 @@ function TradingViewChart({ ticker }: { ticker: string }) {
     script.textContent = JSON.stringify({
       autosize: true,
       symbol: ticker,
-      interval: "D",
+      interval: interval,
       timezone: "America/New_York",
       theme: "dark",
       style: "3",
@@ -312,11 +312,35 @@ function TradingViewChart({ ticker }: { ticker: string }) {
       hide_legend: false,
       save_image: false,
       calendar: false,
-      studies: ["MAExp@tv-basicstudies|20", "MASimple@tv-basicstudies|50", "MASimple@tv-basicstudies|200"],
+      studies: interval === "D"
+        ? ["MAExp@tv-basicstudies|20", "MASimple@tv-basicstudies|50", "MASimple@tv-basicstudies|200"]
+        : ["MAExp@tv-basicstudies|9", "VWAP@tv-basicstudies"],
       support_host: "https://www.tradingview.com",
     });
     container.appendChild(script);
-  }, [ticker]);
+  }, [ticker, interval]);
 
-  return <div className="tradingview-widget-container w-full h-full" ref={containerRef} />;
+  return (
+    <div className="w-full h-full flex flex-col">
+      <div className="flex gap-1 pb-1.5">
+        {[
+          { label: "5m", value: "5" },
+          { label: "15m", value: "15" },
+          { label: "1H", value: "60" },
+          { label: "D", value: "D" },
+          { label: "W", value: "W" },
+        ].map(({ label, value }) => (
+          <button key={value} onClick={() => setInterval_(value)}
+            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+              interval === value
+                ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                : "text-slate-500 hover:text-slate-300 border border-transparent"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1" ref={containerRef} />
+    </div>
+  );
 }
