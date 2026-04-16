@@ -731,11 +731,18 @@ def get_scan_status():
     return _get_scan_status()
 
 
+_scan_running = False
+
 @app.post("/api/scan")
 def trigger_scan():
+    global _scan_running
+    if _scan_running:
+        return {"status": "already_running"}
+
     def _run():
+        global _scan_running
+        _scan_running = True
         import logging
-        # Ensure scan logs go to the log file so status tracking works
         log_path = PROJECT_ROOT / "outputs" / "logs" / "stockpulse.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         root = logging.getLogger()
@@ -750,6 +757,7 @@ def trigger_scan():
         finally:
             root.removeHandler(fh)
             fh.close()
+            _scan_running = False
     threading.Thread(target=_run, daemon=True).start()
     return {"status": "started"}
 
