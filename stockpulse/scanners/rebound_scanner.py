@@ -147,6 +147,10 @@ def _check_active_dip(ticker: str, config: dict) -> dict | None:
     if dip_pct < dip_min:
         return None
 
+    # Min price filter
+    if current_price < 5.0:
+        return None
+
     # Must be BELOW vwap or near OR low — still in the dip
     below_vwap = current_price <= vwap * 1.002
     near_or_low = current_price <= or_low * 1.01
@@ -162,13 +166,19 @@ def _check_active_dip(ticker: str, config: dict) -> dict | None:
         if not clean.empty:
             rsi_current = float(clean.iloc[-1])
 
-    # Compute levels
+    # Compute levels — for active dips, entry is current price (you're buying NOW)
+    # Target is the bounce back to VWAP or above
     stop_pct = exit_cfg.get("stop_max_pct", 1.0) / 100
     stop_price = round(current_price * (1 - stop_pct), 2)
     risk_per_share = current_price - stop_price
+    if risk_per_share <= 0:
+        return None
+    # Target: bounce to VWAP + some profit, or use R multiple
     target_r = exit_cfg.get("target_r", 1.3)
-    target_price = round(current_price + risk_per_share * target_r, 2)
-    entry_zone = round(max(vwap, or_low), 2)  # Buy near VWAP or OR low
+    bounce_target = round(vwap + risk_per_share * 0.5, 2)  # VWAP + half a stop width
+    r_target = round(current_price + risk_per_share * target_r, 2)
+    target_price = max(bounce_target, r_target)  # Whichever is higher
+    entry_zone = round(current_price, 2)  # Entry is NOW — you're buying the dip
 
     # Sizing
     max_risk = sizing_cfg.get("max_risk_per_trade", 20)
@@ -274,12 +284,14 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
     if dip_pct < dip_min_pct and dip_pct < dip_min_atr * atr_pct:
         return None  # Dip not deep enough
 
-    # Intraday RSI (dropna to avoid NaN from first 13 bars)
-    intraday_rsi = ta.rsi(intraday["Close"], length=14)
+    # Intraday RSI — use shorter period (5) for 5-min bars to get meaningful readings
+    intraday_rsi = ta.rsi(intraday["Close"], length=5)
     if intraday_rsi is not None:
         rsi_clean = intraday_rsi.dropna()
         rsi_min = float(rsi_clean.min()) if not rsi_clean.empty else 50.0
         rsi_current = float(rsi_clean.iloc[-1]) if not rsi_clean.empty else 50.0
+        # Clamp — RSI should be 0-100
+        rsi_min = max(0.1, rsi_min)
     else:
         rsi_min = 50.0
         rsi_current = 50.0
@@ -312,24 +324,25 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
     event_override = dip_pct >= 3.0 and cum_rvol_tod >= 2.0
 
     # Quality score (0-100)
+    # Min price filter — skip penny stocks
+    if current_price < 5.0:
+        return None
+
     quality = 40  # Base: dip + reclaim
     if dip_pct >= dip_min_pct * 2:
-        quality += 15  # Deep dip bonus
-    elif dip_pct >= dip_min_pct * 1.5:
-        quality += 10
+        quality += 10  # Deep dip bonus
     if rsi_dipped:
         quality += 15  # RSI oversold bonus
     # Volume quality tiers (TOD-adjusted)
     if bar_rvol_tod >= 1.2:
-        quality += 20  # Strong reclaim volume
+        quality += 15  # Strong reclaim volume
     elif bar_rvol_tod >= 0.9:
-        quality += 15  # Normal volume
-    elif bar_rvol_tod >= 0.5:
-        quality += 5   # Low but not dead
+        quality += 10  # Normal volume
     if event_override:
         quality += 10  # Big gap + in play
     if cum_in_play:
         quality += 5   # Stock is in play today
+    quality = min(quality, 100)  # Cap at 100
 
     # Compute stop and target
     setup_low = day_low
