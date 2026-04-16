@@ -854,6 +854,60 @@ export default function SettingsPage() {
         );
       })()}
 
+      {/* Rebound-2D Mode */}
+      {config?.rebound_mode && (() => {
+        const rb = config.rebound_mode;
+        const entry = rb.entry || {};
+        const exit_cfg = rb.exit || {};
+        const sizing = rb.sizing || {};
+        const guardrails = rb.guardrails || {};
+        return (
+        <div className="glass-card p-6">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-slate-300">Rebound-2D Mode</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Intraday dip-buy sleeve with 1-2 day hold</p>
+          </div>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+              <div className="flex justify-between py-1"><span className="text-slate-500">Enabled</span><span className={cn("font-mono-data", rb.enabled ? "text-green-400" : "text-slate-500")}>{rb.enabled ? "Yes" : "No"}</span></div>
+              <div className="flex justify-between py-1"><span className="text-slate-500">Sleeve Size</span><span className="font-mono-data text-slate-300">${rb.sleeve_size?.toLocaleString()}</span></div>
+              <div className="flex justify-between py-1"><span className="text-slate-500">Manual Exec</span><span className={cn("font-mono-data", rb.manual_execution ? "text-green-400" : "text-slate-500")}>{rb.manual_execution ? "Yes" : "No"}</span></div>
+            </div>
+            <div className="pt-2">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Entry Rules</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="flex justify-between py-1"><span className="text-slate-500">No entries before</span><span className="font-mono-data text-slate-300">{entry.no_entries_before} ET</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Min dip %</span><span className="font-mono-data text-slate-300">{entry.dip_min_pct}%</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">RSI max</span><span className="font-mono-data text-slate-300">{entry.intraday_rsi_max}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">VWAP reclaim</span><span className={cn("font-mono-data", entry.require_vwap_reclaim ? "text-green-400" : "text-slate-500")}>{entry.require_vwap_reclaim ? "Yes" : "No"}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Volume mult</span><span className="font-mono-data text-slate-300">{entry.reclaim_volume_multiple}x</span></div>
+              </div>
+            </div>
+            <div className="pt-2">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Exit Rules</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="flex justify-between py-1"><span className="text-slate-500">Stop max %</span><span className="font-mono-data text-red-400">{exit_cfg.stop_max_pct}%</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Target R</span><span className="font-mono-data text-green-400">{exit_cfg.target_r}R</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">No bounce exit</span><span className="font-mono-data text-slate-300">{exit_cfg.no_bounce_exit_time} ET</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Max hold</span><span className="font-mono-data text-slate-300">{exit_cfg.max_hold_days}d</span></div>
+              </div>
+            </div>
+            <div className="pt-2">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Sizing & Guardrails</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="flex justify-between py-1"><span className="text-slate-500">Position size</span><span className="font-mono-data text-slate-300">${sizing.default_position?.toLocaleString()}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Reserve</span><span className="font-mono-data text-slate-300">${sizing.reserve_cash?.toLocaleString()}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Max risk/trade</span><span className="font-mono-data text-red-400">${sizing.max_risk_per_trade}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Max/day</span><span className="font-mono-data text-slate-300">{guardrails.max_round_trips_per_day}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Max/week</span><span className="font-mono-data text-slate-300">{guardrails.max_round_trips_per_week}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500">Risk-off disable</span><span className={cn("font-mono-data", guardrails.disable_in_risk_off ? "text-green-400" : "text-slate-500")}>{guardrails.disable_in_risk_off ? "Yes" : "No"}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
       {/* Progressive Adds */}
       {config?.allocation?.progressive_adds && (() => {
         const pa = config.allocation.progressive_adds;

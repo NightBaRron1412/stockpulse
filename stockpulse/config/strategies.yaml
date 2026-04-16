@@ -217,3 +217,43 @@ market_regime:
       cash_reserve_mult: 2.0
       buy_threshold_add: 20
       starter_enabled: false
+rebound_mode:
+  enabled: true
+  sleeve_size: 2000
+  separate_pnl: true
+  manual_execution: true
+  eligibility:
+    main_score_gte: 25
+    block_tiers:
+    - CAUTION
+    - SELL
+    weekly_trend_positive: true
+    no_earnings_today_or_next_morning: true
+    min_avg_dollar_volume: 100000000
+  entry:
+    no_entries_before: '10:00'
+    dip_min_pct: 1.0
+    dip_min_atr_fraction: 0.35
+    intraday_rsi_max: 35
+    require_vwap_reclaim: true
+    reclaim_volume_multiple: 1.5
+  exit:
+    stop_max_pct: 1.0
+    stop_max_atr_fraction: 0.35
+    target_r: 1.3
+    no_bounce_exit_time: '13:00'
+    overnight_only_if:
+      close_above_vwap: true
+      close_upper_half_range: true
+      main_score_gte: 32
+    max_hold_days: 2
+  sizing:
+    default_position: 1500
+    reserve_cash: 500
+    max_positions: 1
+    max_risk_per_trade: 20
+  guardrails:
+    disable_in_risk_off: true
+    max_round_trips_per_day: 1
+    max_round_trips_per_week: 3
+    never_average_down: true

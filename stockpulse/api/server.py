@@ -871,6 +871,7 @@ def get_config_endpoint():
         "portfolio_advisor": strat.get("portfolio_advisor", {}),
         "market_regime": strat.get("market_regime", {}),
         "backtesting": strat.get("backtesting", {}),
+        "rebound_mode": strat.get("rebound_mode", {}),
     }
 
 
@@ -1191,6 +1192,57 @@ def get_advisor_plan():
 def get_advisor_config():
     from stockpulse.config.settings import load_strategies
     return load_strategies().get("portfolio_advisor", {})
+
+
+# ═══════════════════════════════════════════════════
+# Rebound-2D Mode
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/rebound/scan")
+def scan_rebound():
+    from stockpulse.scanners.rebound_scanner import scan_rebound_candidates, get_eligible_tickers
+    eligible = get_eligible_tickers()
+    candidates = scan_rebound_candidates(eligible)
+    return {"eligible_count": len(eligible), "candidates": candidates}
+
+@app.get("/api/rebound/status")
+def rebound_status():
+    from stockpulse.portfolio.rebound import get_sleeve_status
+    return get_sleeve_status()
+
+@app.post("/api/rebound/open")
+def rebound_open(data: dict):
+    from stockpulse.portfolio.rebound import open_trade
+    ticker = data.get("ticker", "").upper()
+    shares = data.get("shares")
+    entry_price = data.get("entry_price")
+    stop_price = data.get("stop_price")
+    target_price = data.get("target_price")
+    setup = data.get("setup", "")
+    if not ticker or shares is None or entry_price is None:
+        raise HTTPException(400, "ticker, shares, entry_price required")
+    return open_trade(ticker, int(shares), float(entry_price),
+                      float(stop_price or 0), float(target_price or 0), setup)
+
+@app.post("/api/rebound/close")
+def rebound_close(data: dict):
+    from stockpulse.portfolio.rebound import close_trade
+    ticker = data.get("ticker", "").upper()
+    exit_price = data.get("exit_price")
+    reason = data.get("reason", "manual")
+    if not ticker or exit_price is None:
+        raise HTTPException(400, "ticker, exit_price required")
+    return close_trade(ticker, float(exit_price), reason)
+
+@app.get("/api/rebound/exits")
+def rebound_exits():
+    from stockpulse.portfolio.rebound import check_active_exits
+    return check_active_exits()
+
+@app.get("/api/rebound/config")
+def rebound_config():
+    from stockpulse.config.settings import load_strategies
+    return load_strategies().get("rebound_mode", {})
 
 
 @app.post("/api/advisor/execute")

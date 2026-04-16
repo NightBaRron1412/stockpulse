@@ -15,6 +15,7 @@ const navItems = [
   { href: "/signals", label: "Signals" },
   { href: "/validation", label: "Validation" },
   { href: "/advisor", label: "Advisor" },
+  { href: "/rebound", label: "Rebound" },
   { href: "/reports", label: "Reports" },
   { href: "/settings", label: "Settings" },
 ];
