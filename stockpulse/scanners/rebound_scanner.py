@@ -56,9 +56,10 @@ def scan_rebound_candidates(eligible_tickers: list[str]) -> list[dict]:
         except Exception:
             logger.debug("Rebound scan failed for %s", ticker)
 
-    # Sort by quality score (higher = better setup)
+    # Sort by quality score (higher = better setup), return top 2 max
     candidates.sort(key=lambda c: c.get("quality", 0), reverse=True)
-    return candidates
+    max_candidates = config.get("sizing", {}).get("max_positions", 1) + 1  # show 1 extra as backup
+    return candidates[:max(2, max_candidates)]
 
 
 def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
@@ -127,39 +128,46 @@ def _check_rebound_setup(ticker: str, config: dict) -> dict | None:
     if dip_pct < dip_min_pct and dip_pct < dip_min_atr * atr_pct:
         return None  # Dip not deep enough
 
-    # Intraday RSI
+    # Intraday RSI (dropna to avoid NaN from first 13 bars)
     intraday_rsi = ta.rsi(intraday["Close"], length=14)
-    rsi_min = float(intraday_rsi.min()) if intraday_rsi is not None else 50
-    rsi_current = float(intraday_rsi.iloc[-1]) if intraday_rsi is not None else 50
+    if intraday_rsi is not None:
+        rsi_clean = intraday_rsi.dropna()
+        rsi_min = float(rsi_clean.min()) if not rsi_clean.empty else 50.0
+        rsi_current = float(rsi_clean.iloc[-1]) if not rsi_clean.empty else 50.0
+    else:
+        rsi_min = 50.0
+        rsi_current = 50.0
     rsi_max = entry_cfg.get("intraday_rsi_max", 35)
 
     rsi_dipped = rsi_min <= rsi_max
 
     # VWAP/OR reclaim check
-    touched_vwap_or_or_low = day_low <= max(vwap, or_low) * 1.002  # within 0.2%
     reclaimed = current_price > vwap and current_price > or_low
 
-    # Volume on reclaim
+    # Volume on reclaim (last 3 bars vs session average)
     recent_vol = float(intraday["Volume"].iloc[-3:].mean()) if len(intraday) >= 3 else 0
     avg_vol = float(intraday["Volume"].mean())
     vol_mult = recent_vol / avg_vol if avg_vol > 0 else 1.0
     vol_threshold = entry_cfg.get("reclaim_volume_multiple", 1.5)
     vol_confirmed = vol_mult >= vol_threshold
 
-    # Quality score (0-100)
-    quality = 0
-    if dip_pct >= dip_min_pct:
-        quality += 25
-    if rsi_dipped:
-        quality += 25
-    if reclaimed:
-        quality += 25
-    if vol_confirmed:
-        quality += 25
-
-    # Need at least reclaim + one other signal
-    if not reclaimed or quality < 50:
+    # HARD REQUIREMENTS (expert rules):
+    # 1. Must have reclaimed VWAP/OR low
+    # 2. Must have dipped enough
+    # 3. Volume confirmation on reclaim required
+    if not reclaimed:
         return None
+    if not vol_confirmed:
+        return None
+
+    # Quality score (0-100) — bonus signals
+    quality = 50  # Base: reclaimed + volume confirmed
+    if dip_pct >= dip_min_pct * 1.5:
+        quality += 15  # Deep dip bonus
+    if rsi_dipped:
+        quality += 20  # RSI oversold bonus
+    if vol_mult >= vol_threshold * 1.5:
+        quality += 15  # Strong volume bonus
 
     # Compute stop and target
     setup_low = day_low
