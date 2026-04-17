@@ -159,7 +159,7 @@ def _check_active_dip(ticker: str, config: dict) -> dict | None:
         return None  # Already bounced — not an active dip
 
     # RSI
-    rsi = ta.rsi(intraday["Close"], length=14)
+    rsi = ta.rsi(intraday["Close"], length=5)
     rsi_current = 50.0
     if rsi is not None:
         clean = rsi.dropna()
